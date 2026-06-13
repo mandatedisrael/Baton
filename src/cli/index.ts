@@ -2,8 +2,8 @@
 /**
  * baton — Git for agent memory.
  * Thin command layer: all behavior lives in core/store so the MCP server
- * (phase 4) drives the exact same engine. Zero dependencies: a six-command
- * CLI does not need an argument-parsing framework.
+ * (phase 4) drives the exact same engine. Zero dependencies: a small CLI
+ * does not need an argument-parsing framework.
  */
 import { die } from "./output.ts";
 import { runInit } from "./commands/init.ts";
@@ -11,7 +11,9 @@ import { runStatus } from "./commands/status.ts";
 import { runPass } from "./commands/pass.ts";
 import { runLog } from "./commands/log.ts";
 import { runShow } from "./commands/show.ts";
+import { runResume } from "./commands/resume.ts";
 import { runDoctor } from "./commands/doctor.ts";
+import { TOOL_IDS, type ToolId } from "../schema/handoff.ts";
 
 const USAGE = `baton — verifiable handoffs between coding agents (git for agent memory)
 
@@ -23,11 +25,13 @@ Commands:
   pass         seal the current working state into a handoff (commit)
   log          list handoffs, newest first (* = head)
   show <id>    print a verified handoff by id (short ids ok)
+  resume [id]  render the resume prompt for a handoff (head if omitted)
   doctor       diagnose the installation and verify local batons
 
 Options:
-  -h, --help     show this help
-  -v, --version  show version
+  -h, --help        show this help
+  -v, --version     show version
+  --tool <id>       (resume) receiving tool dialect: ${TOOL_IDS.join(" | ")}
 `;
 
 const VERSION = "0.1.0";
@@ -62,6 +66,21 @@ function main(argv: string[]): void {
         return;
       }
       return runShow(process.cwd(), id);
+    }
+    case "resume": {
+      const toolFlag = rest.indexOf("--tool");
+      let receivingTool: ToolId | undefined;
+      if (toolFlag !== -1) {
+        const value = rest[toolFlag + 1];
+        if (!value || !(TOOL_IDS as readonly string[]).includes(value)) {
+          process.stderr.write(`usage: baton resume [id] [--tool ${TOOL_IDS.join("|")}]\n`);
+          process.exitCode = 2;
+          return;
+        }
+        receivingTool = value as ToolId;
+      }
+      const id = rest.find((a, i) => !a.startsWith("--") && rest[i - 1] !== "--tool");
+      return runResume(process.cwd(), id, receivingTool);
     }
     case "doctor":
       return runDoctor(process.cwd());

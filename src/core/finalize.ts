@@ -11,7 +11,9 @@ import { BatonError } from "./errors.ts";
 import {
   parseHandoff,
   SCHEMA_VERSION,
+  type Attachment,
   type CaptureMode,
+  type Fidelity,
   type Handoff,
   type ToolId,
 } from "../schema/handoff.ts";
@@ -26,6 +28,10 @@ export interface FinalizeMeta {
   branch?: string;
   model?: string;
   timestamp?: string;
+  /** Raw source attachments (e.g. the transcript) that travel with the handoff. */
+  attachments?: Attachment[];
+  /** Grader output; defaults to ungraded (`score: null`) — honest until graded. */
+  fidelity?: Fidelity;
 }
 
 export interface FinalizedHandoff {
@@ -54,9 +60,9 @@ export function finalize(state: WorkingState, meta: FinalizeMeta): FinalizedHand
     repoMap: state.repoMap,
     nextActions: state.nextActions,
     envNotes: state.envNotes,
-    attachments: [], // raw transcript attachment arrives with capture (phase 2)
+    attachments: meta.attachments ?? [],
     verbatimRules: state.verbatimRules,
-    fidelity: { score: null }, // graded in phase 2; null is honest until then
+    fidelity: meta.fidelity ?? { score: null }, // null is honest until graded
   };
 
   let handoff: Handoff;

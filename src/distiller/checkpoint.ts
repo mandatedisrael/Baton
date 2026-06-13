@@ -12,15 +12,20 @@
  * session: any failure is swallowed (the CLI command exits 0 regardless).
  */
 import type { CapturedSession, CaptureMessage } from "./capture/transcript.ts";
-import type { CheckpointCursor } from "../store/project.ts";
+
+/** The position the slicer reads from / advances to (subset of the stored cursor). */
+export interface DeltaPosition {
+  sessionId: string | null;
+  line: number;
+}
 
 export interface DeltaResult {
   delta: CaptureMessage[];
-  cursor: CheckpointCursor;
+  cursor: DeltaPosition;
 }
 
-/** The new turns since `prev`, plus the advanced cursor. Pure. */
-export function sliceDelta(session: CapturedSession, prev: CheckpointCursor): DeltaResult {
+/** The new turns since `prev`, plus the advanced position. Pure. */
+export function sliceDelta(session: CapturedSession, prev: DeltaPosition): DeltaResult {
   const sameSession = session.sessionId !== null && session.sessionId === prev.sessionId;
   const fromLine = sameSession ? prev.line : 0;
   const delta = session.messages.filter((m) => m.line > fromLine);

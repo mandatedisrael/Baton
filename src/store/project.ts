@@ -37,9 +37,11 @@ export interface CheckpointCursor {
   sessionId: string | null;
   /** Highest transcript line already folded into the working state. */
   line: number;
+  /** Path to that session's transcript — recorded so `pass` can attach the source. */
+  transcriptPath: string | null;
 }
 
-export const EMPTY_CURSOR: CheckpointCursor = { sessionId: null, line: 0 };
+export const EMPTY_CURSOR: CheckpointCursor = { sessionId: null, line: 0, transcriptPath: null };
 
 export interface ProjectConfig {
   schemaVersion: 1;
@@ -123,10 +125,11 @@ export class ProjectStore {
   loadCursor(): CheckpointCursor {
     if (!existsSync(cursorPath(this.root))) return { ...EMPTY_CURSOR };
     try {
-      const r = obj(this.readJson(cursorPath(this.root)), "cursor", ["sessionId", "line"]);
+      const r = obj(this.readJson(cursorPath(this.root)), "cursor", ["sessionId", "line", "transcriptPath"]);
       return {
         sessionId: nullable(r.sessionId, "cursor.sessionId", (s, p) => str(s, p)),
         line: typeof r.line === "number" && Number.isInteger(r.line) && r.line >= 0 ? r.line : 0,
+        transcriptPath: nullable(r.transcriptPath ?? null, "cursor.transcriptPath", (s, p) => str(s, p)),
       };
     } catch {
       return { ...EMPTY_CURSOR }; // a corrupt cursor just means "redistill from the start"

@@ -72,7 +72,8 @@ function main(argv: string[]): void {
     case "status":
       return runStatus(process.cwd());
     case "pass":
-      return runPass(process.cwd());
+      void runPass(process.cwd()).catch(die);
+      return;
     case "log":
       return runLog(process.cwd());
     case "show": {

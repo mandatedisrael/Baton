@@ -62,11 +62,19 @@ export async function runCheckpoint(): Promise<void> {
     if (root === null) return debug("not inside a baton project");
     const store = ProjectStore.open(root);
 
+    const prev = store.loadCursor();
     const session = captureClaudeCodeFile(transcriptPath);
-    const { delta, cursor } = sliceDelta(session, store.loadCursor());
-    if (delta.length === 0) return debug("no new turns since last checkpoint");
+    const { delta, cursor } = sliceDelta(session, prev);
+    const sameSession = session.sessionId !== null && session.sessionId === prev.sessionId;
+    const heldLine = sameSession ? prev.line : 0; // not-yet-distilled position
 
+    // Record the transcript path on every path so `pass` can attach the source.
+    if (delta.length === 0) {
+      store.saveCursor({ ...cursor, transcriptPath });
+      return debug("no new turns since last checkpoint");
+    }
     if (!process.env.ANTHROPIC_API_KEY) {
+      store.saveCursor({ sessionId: session.sessionId, line: heldLine, transcriptPath });
       return debug("ANTHROPIC_API_KEY not set — skipping distillation (cursor left for later)");
     }
 
@@ -78,7 +86,7 @@ export async function runCheckpoint(): Promise<void> {
     });
 
     if (ops.length > 0) store.saveWorkingState(applyPatches(store.loadWorkingState(), ops));
-    store.saveCursor(cursor); // advance only after a successful distillation
+    store.saveCursor({ ...cursor, transcriptPath }); // advance only after a successful distillation
     debug(`applied ${ops.length} op(s); cursor → line ${cursor.line}`);
   } catch (err) {
     debug(err instanceof Error ? err.message : String(err)); // swallow — never disrupt the session

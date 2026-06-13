@@ -24,11 +24,22 @@ import { isoDatetime, literal, nullable, obj, str } from "../schema/validate.ts"
 import {
   batonDir,
   configPath,
+  cursorPath,
   findProjectRoot,
   handoffPath,
   handoffsDir,
   workingStatePath,
 } from "./paths.ts";
+
+/** Where the distiller has read up to — so each checkpoint sees only new turns. */
+export interface CheckpointCursor {
+  /** The Claude Code session whose transcript was last distilled. */
+  sessionId: string | null;
+  /** Highest transcript line already folded into the working state. */
+  line: number;
+}
+
+export const EMPTY_CURSOR: CheckpointCursor = { sessionId: null, line: 0 };
 
 export interface ProjectConfig {
   schemaVersion: 1;
@@ -104,6 +115,26 @@ export class ProjectStore {
 
   loadWorkingState(): WorkingState {
     return this.readJson(workingStatePath(this.root)) as WorkingState;
+  }
+
+  // -- checkpoint cursor ------------------------------------------------------
+
+  /** Where the distiller left off. Returns the empty cursor if none yet. */
+  loadCursor(): CheckpointCursor {
+    if (!existsSync(cursorPath(this.root))) return { ...EMPTY_CURSOR };
+    try {
+      const r = obj(this.readJson(cursorPath(this.root)), "cursor", ["sessionId", "line"]);
+      return {
+        sessionId: nullable(r.sessionId, "cursor.sessionId", (s, p) => str(s, p)),
+        line: typeof r.line === "number" && Number.isInteger(r.line) && r.line >= 0 ? r.line : 0,
+      };
+    } catch {
+      return { ...EMPTY_CURSOR }; // a corrupt cursor just means "redistill from the start"
+    }
+  }
+
+  saveCursor(cursor: CheckpointCursor): void {
+    this.writeJsonAtomic(cursorPath(this.root), cursor);
   }
 
   saveWorkingState(state: WorkingState): void {

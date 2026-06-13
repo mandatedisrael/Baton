@@ -4,6 +4,7 @@
  *   <project>/.baton/
  *     config.json        project identity + head pointer
  *     state/working.json rolling WorkingState (local, private)
+ *     state/cursor.json  checkpoint cursor (last distilled transcript position)
  *     handoffs/<id>.json sealed commits (local until anchored, phase 3)
  *
  * `findProjectRoot` walks up from cwd like git does, so every command works
@@ -24,6 +25,10 @@ export function configPath(root: string): string {
 
 export function workingStatePath(root: string): string {
   return join(batonDir(root), "state", "working.json");
+}
+
+export function cursorPath(root: string): string {
+  return join(batonDir(root), "state", "cursor.json");
 }
 
 export function handoffsDir(root: string): string {

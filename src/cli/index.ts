@@ -13,6 +13,8 @@ import { runLog } from "./commands/log.ts";
 import { runShow } from "./commands/show.ts";
 import { runResume } from "./commands/resume.ts";
 import { runRender } from "./commands/render.ts";
+import { runCheckpoint } from "./commands/checkpoint.ts";
+import { runInstall, runUninstall } from "./commands/install.ts";
 import { runDoctor } from "./commands/doctor.ts";
 import { TOOL_IDS, type ToolId } from "../schema/handoff.ts";
 import { RULES_TARGETS, type RulesFormat } from "../render/rules.ts";
@@ -29,11 +31,14 @@ Commands:
   show <id>    print a verified handoff by id (short ids ok)
   resume [id]  render the resume prompt for a handoff (head if omitted)
   render <fmt> project a handoff into a rules file (${Object.keys(RULES_TARGETS).join(" | ")})
+  install      register the Claude Code checkpoint hook for this project
+  uninstall    remove the Claude Code checkpoint hook
   doctor       diagnose the installation and verify local batons
 
 Options:
   -h, --help        show this help
   -v, --version     show version
+  --no-hooks        (init) skip Claude Code hook installation
   --tool <id>       (resume) receiving tool dialect: ${TOOL_IDS.join(" | ")}
   --write           (render) upsert the rules file instead of printing to stdout
 `;
@@ -55,7 +60,15 @@ function main(argv: string[]): void {
       process.stdout.write(`baton ${VERSION}\n`);
       return;
     case "init":
-      return runInit(process.cwd());
+      return runInit(process.cwd(), { hooks: !rest.includes("--no-hooks") });
+    case "checkpoint":
+      // Hook handler: must never disrupt the host session — always exit 0.
+      void runCheckpoint().finally(() => process.exit(0));
+      return;
+    case "install":
+      return runInstall(process.cwd());
+    case "uninstall":
+      return runUninstall(process.cwd());
     case "status":
       return runStatus(process.cwd());
     case "pass":

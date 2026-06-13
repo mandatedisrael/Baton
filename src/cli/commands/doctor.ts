@@ -1,5 +1,6 @@
 import { ProjectStore } from "../../store/project.ts";
 import { findProjectRoot } from "../../store/paths.ts";
+import { hooksInstalled } from "../hooks.ts";
 import { fail, ok, warn } from "../output.ts";
 
 /**
@@ -46,6 +47,19 @@ export function runDoctor(cwd: string): void {
     store.loadHandoff(head);
     return "resolves and verifies";
   });
+
+  // Capture readiness — surfaced so users can see whether automatic
+  // checkpointing is actually wired up, without digging through configs.
+  check("checkpoint hook", () =>
+    hooksInstalled(store.root)
+      ? "installed (Claude Code Stop hook)"
+      : "not installed — run `baton install` for automatic checkpoints",
+  );
+  check("distiller key", () =>
+    process.env.ANTHROPIC_API_KEY
+      ? "ANTHROPIC_API_KEY set"
+      : "ANTHROPIC_API_KEY not set — checkpoints no-op; `pass` uses the git fallback",
+  );
 
   process.exit(healthy ? 0 : 1);
 }

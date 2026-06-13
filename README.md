@@ -1,56 +1,190 @@
 # BATON
 
-**Git for agent memory.** Hand off live coding-agent context between Claude Code, Codex, Cursor, and any MCP-compatible tool — verifiably, across machines, with cryptographic ownership and revocable sharing. Built on Sui + Walrus + Seal.
+**Git for agent memory.** Baton hands off live coding-agent context between Claude Code, Codex, Cursor, and any MCP-compatible tool — verifiably, across machines, with cryptographic ownership and revocable sharing.
 
-The mental model is a relay race: the runner (agent/model) changes; the race state travels in the baton, not the runner. You own the baton; agents are temporary runners hired per leg.
+When you switch agents or sit down at another machine, you normally re-explain the project from scratch — what you're building, what's already decided, what was tried and failed. The new agent doesn't know, so it repeats mistakes, and the moment you run `/clear` the context is gone. Baton turns that throwaway context into a durable, verifiable artifact you own and can hand to any agent.
 
-## Status
+---
 
-Phase 1 of 6 — foundation. Local-only: schema, content addressing, working state, store, CLI. No chain, no distiller yet.
+## The mental model: a relay race
 
-| Phase | Scope |
+The runner changes; the race state travels in the **baton**, not the runner.
+
+In Baton, the *runner* is the agent (Claude Code now, Codex in twenty minutes, a teammate's agent tomorrow). The agents are temporary — hired per leg of the race. What persists is the baton: the working state of the task, passed cleanly from one runner to the next. **You are the coach.** You own the baton; agents read and write through it but never own it.
+
+A baton is a *commit*, not a one-shot summary — sealed, content-addressed, and chained to its parents, exactly like git. Switching from Claude Code to Codex is handing off the baton; the next runner picks up mid-stride, already knowing what the last one tried and why it failed.
+
+---
+
+## What's in a baton
+
+A handoff is a small, structured document — typically a few kilobytes — capturing everything a fresh agent needs to continue:
+
+| Field | What it holds |
 |---|---|
-| **1. Foundation** ← here | handoff schema v1, canonical JSON + SHA-256 content addressing, WorkingState + checkpoint patch ops, local store with verify-on-read, CLI skeleton |
-| 2. Distiller | capture adapters (Claude Code hooks → transcripts), micro-checkpoint extraction, secrets scrubber, fidelity grader, review gate |
-| 3. Chain & storage | Move package, Walrus blob storage, Seal encryption, async upload queue, verify-on-resume |
-| 4. MCP + renderer | `baton-mcp` server, per-tool resume prompts, CLAUDE.md/AGENTS.md rendering, cross-examination (`baton_verify`) |
-| 5. Identity & sharing | zkLogin, AccessCap share/revoke, Seal policy rotation, sponsored gas |
-| 6. Viewer & hardening | Walrus Sites lineage viewer, failure-mode hardening, beta, demo |
+| `mission` | The current goal, in a sentence or two. |
+| `status` | `done` · `in-progress` · `blocked`. |
+| `decisions[]` | What was chosen and **why** — each with a citation into the source. |
+| `graveyard[]` | **Approaches that were tried and failed, and why.** The single highest-value field — it stops the next agent repeating dead ends. |
+| `repoMap` | Files touched, files that matter, entry points — with content hashes. |
+| `nextActions[]` | Ordered, concrete next steps. |
+| `envNotes[]` | Versions, quirks, setup landmines. |
+| `verbatimRules[]` | Project rules destined for `CLAUDE.md` / `AGENTS.md` / `.cursorrules`. |
+| `attachments[]` | The raw source (e.g. the full transcript) the distillation was drawn from. |
+| `fidelity` | How faithful the distillation is to its source (0–1) — or `null` until graded. |
+| `meta` | Project, branch, tool, capture mode, model, author, timestamp, and **parent baton ids** (the lineage DAG). |
 
-## Quickstart (dev)
+### Two-tier truth
 
-Requires Node ≥ 22.18 (runs TypeScript natively). Zero runtime dependencies.
+A baton keeps two layers, and never throws either away:
 
-```sh
-npm install             # dev deps only (typescript, @types/node)
-npm test
-npm run baton init      # in a project directory
-npm run baton status
-npm run baton pass      # seal the working state into a handoff
-npm run baton log
-npm run baton doctor
+- **The distilled handoff** — small, cheap to inject, what a resuming agent actually reads.
+- **The sealed source** — the raw transcript it was distilled from, travelling alongside as an attachment, with every distilled claim citing the exact line span it came from.
+
+So fidelity is always *recoverable*: if a summary is ever in doubt, the receiving agent can cross-examine it against the ground truth. Most systems extract context and discard the source; Baton seals the source and measures how well the summary matches it.
+
+---
+
+## How it works
+
+```
+   you work in an agent                          you (or a teammate) resume
+   ┌──────────────────┐                          ┌──────────────────────┐
+   │   Claude Code     │                          │   Codex / Cursor /    │
+   │   Codex / Cursor  │                          │   Claude Code / web   │
+   └────────┬─────────┘                           └───────────▲──────────┘
+            │ session hooks                                    │ resume prompt
+            ▼                                                  │
+   ┌──────────────────┐    baton pass    ┌───────────────┐   │
+   │  micro-checkpoints │ ───────────────▶│  sealed baton  │──┘
+   │  → WorkingState    │   (distill,      │ (content-addr, │  verify hash,
+   │  (rolling, local)  │    scrub, grade, │  signed,       │  render per tool
+   └──────────────────┘    seal)          │  lineage DAG)  │
+                                          └───────────────┘
 ```
 
-## Design principles
+1. **Capture (continuous, invisible).** As you work, session hooks fire micro-checkpoints. Each looks at just the recent delta and proposes small patches to a rolling *working state*: add a decision, move a failed approach to the graveyard, update status. Small targets mean small, self-correcting errors — later checkpoints overwrite earlier mistakes ("latest truth wins").
 
-- **Content-addressed.** A handoff's id is the SHA-256 hash of its canonical JSON (RFC 8785-style). Verification anywhere is "recompute and compare". The algorithm is recorded alongside hashes, so migrating (e.g. to BLAKE3) is a tagged change, not a flag day.
-- **Verify on every read.** Tampered batons refuse to load — locally today, on resume from Walrus in phase 3. A hash mismatch is a loud failure, never a silent one.
-- **Pure core.** State transitions (`applyPatch`, `finalize`) are pure functions; IO lives only in the store and CLI. The distiller and MCP server plug in without touching them.
-- **Two-tier truth.** The distilled handoff is what gets injected; the raw source travels alongside (sealed, cited per claim) — we never throw away the source.
-- **Honest fields.** `fidelity.score` is `null` until graded; `captureMode: "fallback"` says so when capture was degraded. No fake confidence.
-- **No blockchain-speak in UX.** Users see batons, projects, verification — never blobs or epochs.
-- **Zero dependencies in the foundation.** Node built-ins only (crypto, fs, test). Validation is strict: unknown keys are rejected, never silently stripped — a content-addressed document must contain exactly what gets hashed.
+2. **Pass = commit.** `baton pass` finalizes the accumulated working state into an immutable baton: a final consistency sweep, a **secrets scrub** (so pasted API keys never get sealed), an optional **fidelity grade** against the source, then content-addressing and sealing. Sealing is fast because the work was done incrementally — there's no single summarization step to get wrong.
 
-## Layout
+3. **Resume.** On another tool or machine, Baton fetches the head baton, **verifies its hash**, and renders a tool-specific resume prompt: the mission, the decisions, and — front and center — the graveyard. The new agent picks up knowing what the last one already failed at, and can verify any claim against the cited source before acting.
+
+Lineage is a DAG, like git: every baton points at its parents, parallel sessions create siblings, and merges have two parents.
+
+---
+
+## Architecture
+
+Baton is layered so the hard guarantees live in a small, pure core and everything else plugs in around it.
 
 ```
 src/
-  schema/    handoff schema v1 + strict validator — the wire format
-  core/      pure logic: canonicalize, hash, working state, finalize
+  schema/    the wire format — handoff schema + strict validator
+  core/      pure logic: canonical JSON, SHA-256 content addressing,
+             working-state patch ops, finalize (pass = commit)
+  distiller/ capture adapters, secrets scrubber, micro-checkpoint
+             extractor, fidelity grader
+  llm/       provider-agnostic model client (the distiller's boundary)
   store/     local persistence (.baton/), atomic writes, verify-on-read
-  cli/       thin command layer over the engine
-tests/
+  render/    resume prompts + CLAUDE.md / AGENTS.md / .cursorrules
+  cli/       thin command layer + Claude Code hook integration
 ```
+
+- **Schema** is the contract every part agrees on — a strict validator that *rejects* unknown keys rather than stripping them, because a content-addressed document must contain exactly what gets hashed.
+- **Core** is pure functions: `canonicalize` → bytes, `hash` → identity, `applyPatch`/`finalize` → state transitions. No IO, no clock beyond what callers pass in. This is what makes verification deterministic across machines.
+- **The distiller** turns raw sessions into batons. It runs extraction and grading on *your own* model (via a provider-agnostic client), so your code and context never leave your account just to be summarized.
+- **The store** persists batons under `.baton/` (mirroring git's shape) with atomic writes and verify-on-read.
+- **Renderers and the CLI** are thin; the same engine backs an MCP server so any MCP-compatible tool drives identical logic.
+
+**Built on Sui + Walrus + Seal.** Beyond the local engine, a baton's content lives encrypted on **Walrus** (decentralized blob storage), its hashes, lineage, and fidelity attestations are anchored on **Sui**, and **Seal** provides client-side, policy-based encryption with revocable, capability-based sharing. *Today the engine runs fully locally — content-addressed and verifiable on your machine — which is the same trust primitive the networked layers extend.*
+
+---
+
+## Trust & verification
+
+Baton's guarantees come from content addressing, not from trusting a server.
+
+- **Content-addressed.** A baton's id *is* the SHA-256 of its canonical JSON (RFC 8785-style: sorted keys, deterministic serialization). The algorithm is recorded alongside every hash, so a future migration is a tagged change, not a flag day.
+- **Verify on every read.** Every baton loaded from disk — or fetched on resume — is re-hashed and compared to its id. A mismatch is a loud, fatal refusal, never a silent one. Tampered batons don't load.
+- **No one in the trust path sees your plaintext.** Encryption is client-side; storage sees ciphertext; the chain sees only hashes and scores. There is no relayer that reads your code.
+- **Cryptographic sharing and revocation.** Access is granted by capability objects and enforced by encryption policy. Revoking someone rotates the policy — their next fetch decrypts nothing. (Revocation is forward-only: it can't unread what was already fetched, and Baton says so rather than pretending otherwise.)
+- **Measured fidelity.** The hash proves *integrity* (nothing changed since sealing). A separate grade measures *faithfulness* (how well the summary matches its source) and is attested alongside — a signal, honestly scored, not a guarantee.
+
+---
+
+## Capture modes
+
+Different tools expose different ground truth, so Baton has one protocol with several capture adapters. The mode is recorded on every baton — quality is never overstated.
+
+| Mode | Where | Source of truth |
+|---|---|---|
+| `transcript` | Claude Code, Codex, Cursor (local session files) | the raw transcript on disk — highest fidelity |
+| `self-report` | ChatGPT / Claude web (via MCP) | the model fills the schema; a human review gate confirms before sealing |
+| `import` | exported conversation archives | processed client-side |
+| `fallback` | anywhere, no transcript or model available | a degraded baton assembled from git state + plan/TODO files; fidelity stays `null` |
+
+---
+
+## Design principles
+
+- **Content-addressed.** Verification anywhere is "recompute and compare."
+- **Verify on every read.** A hash mismatch is a loud failure, never silent.
+- **Pure core.** State transitions are pure functions; IO lives only in the store and CLI. Everything else plugs in without touching them.
+- **Two-tier truth.** The distilled handoff is injected; the raw source travels alongside, sealed and cited. We never throw away the source.
+- **Honest fields.** `fidelity.score` is `null` until graded; `captureMode: "fallback"` says so when capture was degraded. No fake confidence.
+- **No blockchain-speak in the UX.** You see batons, projects, and verification — never blobs or epochs.
+- **Zero runtime dependencies in the core.** Node built-ins only. Validation is strict: unknown keys are rejected, because a content-addressed document must contain exactly what gets hashed.
+
+---
+
+## Getting started
+
+Requires **Node ≥ 22.18** (runs TypeScript natively). Zero runtime dependencies.
+
+```sh
+npm install          # dev deps only (typescript, @types/node)
+npm test
+```
+
+Then, in a project directory:
+
+```sh
+baton init           # set up .baton/ and auto-wire the Claude Code hook
+# …just work in your agent — checkpoints accrue automatically…
+baton pass           # seal the working state into a baton
+baton resume         # render the resume prompt for the next agent
+```
+
+(In this repo, run commands as `npm run baton -- <command>` until installed globally.)
+
+With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are graded for fidelity. Without it, Baton still works: checkpoints wait, and `baton pass` produces a useful fallback baton from your git working tree. `baton doctor` tells you exactly what's wired up.
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `baton init [--no-hooks]` | Initialize a project and register the Claude Code checkpoint hook. |
+| `baton status` | Show the current working state. |
+| `baton pass` | Seal the working state into a baton (commit). |
+| `baton log` | List batons, newest first (`*` marks the head). |
+| `baton show <id>` | Print a verified baton (short ids ok). |
+| `baton resume [id] [--tool <id>]` | Render the resume prompt for a baton (head if omitted). |
+| `baton render <claude-md\|agents-md\|cursorrules> [id] [--write]` | Project a baton into a per-tool rules file. |
+| `baton install` / `uninstall` | Add or remove the Claude Code checkpoint hook. |
+| `baton doctor` | Diagnose the install and verify local batons. |
+
+---
+
+## Where Baton sits
+
+Handoffs are clearly the primitive every agent vendor wants — Cursor and Codex have each shipped their own. The difference is that a single-vendor handoff lives inside one vendor's walls. A handoff that works *across* Claude Code, Codex, Cursor, and the web can only live on neutral infrastructure that no vendor owns.
+
+- `HANDOFF.md` / `AGENTS.md` files are local prose: no versioning, no verification, no sharing, and they die with your laptop.
+- Memory products extract atomic *facts* and discard the source. Baton hands off full *working state* — as verifiable commits — and keeps the source, cited.
+
+Baton is the handoff layer **nobody owns but you**: encrypted client-side, stored on neutral infrastructure, verifiable on-chain, shareable and revocable.
+
+---
 
 ## License
 

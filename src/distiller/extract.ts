@@ -23,7 +23,8 @@ import {
 } from "../schema/handoff.ts";
 import type { PatchOp, WorkingState } from "../core/working-state.ts";
 import type { CaptureMessage } from "./capture/transcript.ts";
-import { DEFAULT_MODEL, LLMError, type Effort, type LLMClient } from "../llm/client.ts";
+import { DEFAULT_MODEL, type Effort, type LLMClient } from "../llm/client.ts";
+import { extractJsonObject } from "./json.ts";
 
 export interface ExtractionInput {
   /** Recent transcript turns to distill (the delta since the last checkpoint). */
@@ -111,21 +112,6 @@ export function buildExtractionPrompt(input: ExtractionInput): { system: string;
 // ---------------------------------------------------------------------------
 // Parsing — strict per-op validation, resilient to individual bad ops.
 // ---------------------------------------------------------------------------
-
-function extractJsonObject(text: string): Record<string, unknown> {
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
-  const candidate = fenced ? fenced[1]! : text;
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start === -1 || end <= start) {
-    throw new LLMError("extractor response contained no JSON object", { code: "bad_response" });
-  }
-  const parsed = JSON.parse(candidate.slice(start, end + 1));
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new LLMError("extractor response was not a JSON object", { code: "bad_response" });
-  }
-  return parsed as Record<string, unknown>;
-}
 
 const str = (o: Record<string, unknown>, k: string): string | undefined =>
   typeof o[k] === "string" && (o[k] as string).length > 0 ? (o[k] as string) : undefined;

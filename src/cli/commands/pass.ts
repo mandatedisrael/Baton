@@ -12,7 +12,13 @@ import { transcriptAttachment } from "../../distiller/capture/transcript.ts";
 import { transcriptAttachmentId } from "../../distiller/checkpoint.ts";
 import { gradeHandoff } from "../../distiller/grade.ts";
 import { AnthropicClient } from "../../llm/anthropic.ts";
-import { ok, warn } from "../output.ts";
+import { renderReview } from "../../render/review.ts";
+import { confirm, ok, warn } from "../output.ts";
+
+export interface PassOptions {
+  /** Show the distillation + change summary and require confirmation before sealing. */
+  review?: boolean;
+}
 
 /**
  * `baton pass` — seal the current WorkingState into a handoff (commit).
@@ -25,7 +31,7 @@ import { ok, warn } from "../output.ts";
  * persist → advance head. Secrets are scrubbed before sealing; fidelity is null
  * until graded (honest, never faked).
  */
-export async function runPass(cwd: string): Promise<void> {
+export async function runPass(cwd: string, opts: PassOptions = {}): Promise<void> {
   const store = ProjectStore.open(cwd);
   const config = store.config();
   const state = store.loadWorkingState();
@@ -79,6 +85,16 @@ export async function runPass(cwd: string): Promise<void> {
     scrubbed.repoMap.touched.length === 0
   ) {
     warn("nothing to capture — clean working tree and empty state; passing an empty baton");
+  }
+
+  // Review gate: show what's about to be sealed and require confirmation.
+  if (opts.review) {
+    const parent = config.head ? { id: config.head, handoff: store.loadHandoff(config.head) } : null;
+    process.stdout.write("\n" + renderReview(scrubbed, { tool, captureMode, parent }) + "\n");
+    if (!(await confirm("Seal this baton?"))) {
+      warn("aborted — nothing sealed");
+      return;
+    }
   }
 
   const meta = {

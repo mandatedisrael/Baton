@@ -39,6 +39,7 @@ Options:
   -h, --help        show this help
   -v, --version     show version
   --no-hooks        (init) skip Claude Code hook installation
+  --review          (pass) preview the distillation and confirm before sealing
   --tool <id>       (resume) receiving tool dialect: ${TOOL_IDS.join(" | ")}
   --write           (render) upsert the rules file instead of printing to stdout
 `;
@@ -72,7 +73,7 @@ function main(argv: string[]): void {
     case "status":
       return runStatus(process.cwd());
     case "pass":
-      void runPass(process.cwd()).catch(die);
+      void runPass(process.cwd(), { review: rest.includes("--review") }).catch(die);
       return;
     case "log":
       return runLog(process.cwd());

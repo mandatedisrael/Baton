@@ -12,8 +12,10 @@ import { runPass } from "./commands/pass.ts";
 import { runLog } from "./commands/log.ts";
 import { runShow } from "./commands/show.ts";
 import { runResume } from "./commands/resume.ts";
+import { runRender } from "./commands/render.ts";
 import { runDoctor } from "./commands/doctor.ts";
 import { TOOL_IDS, type ToolId } from "../schema/handoff.ts";
+import { RULES_TARGETS, type RulesFormat } from "../render/rules.ts";
 
 const USAGE = `baton — verifiable handoffs between coding agents (git for agent memory)
 
@@ -26,12 +28,14 @@ Commands:
   log          list handoffs, newest first (* = head)
   show <id>    print a verified handoff by id (short ids ok)
   resume [id]  render the resume prompt for a handoff (head if omitted)
+  render <fmt> project a handoff into a rules file (${Object.keys(RULES_TARGETS).join(" | ")})
   doctor       diagnose the installation and verify local batons
 
 Options:
   -h, --help        show this help
   -v, --version     show version
   --tool <id>       (resume) receiving tool dialect: ${TOOL_IDS.join(" | ")}
+  --write           (render) upsert the rules file instead of printing to stdout
 `;
 
 const VERSION = "0.1.0";
@@ -81,6 +85,17 @@ function main(argv: string[]): void {
       }
       const id = rest.find((a, i) => !a.startsWith("--") && rest[i - 1] !== "--tool");
       return runResume(process.cwd(), id, receivingTool);
+    }
+    case "render": {
+      const format = rest[0];
+      if (!format || !(format in RULES_TARGETS)) {
+        process.stderr.write(`usage: baton render <${Object.keys(RULES_TARGETS).join("|")}> [id] [--write]\n`);
+        process.exitCode = 2;
+        return;
+      }
+      const write = rest.includes("--write");
+      const id = rest.slice(1).find((a) => !a.startsWith("--"));
+      return runRender(process.cwd(), format as RulesFormat, id, write);
     }
     case "doctor":
       return runDoctor(process.cwd());

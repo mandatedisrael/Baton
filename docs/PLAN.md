@@ -1,7 +1,7 @@
 # BATON — Build Plan
 ### The verifiable handoff & memory protocol for coding agents, on Sui + Walrus + Seal
 
-**Status:** Phases 1–4 are complete. The raw-keypair Phase 5 sharing slice is also live on Testnet: address-bound `AccessCap` grants, recipient verification, delegated Seal recovery, immediate revocation, and generation-safe re-granting have been proven with two real identities. zkLogin and sponsored gas remain.
+**Status:** Phases 1–4 are complete. Two raw-keypair Phase 5 slices are live on Testnet: delegated sharing/revocation and invitation-scoped sponsored registration for zero-balance users. A supported-provider zkLogin flow, a public sponsor deployment, and broader multi-user testing remain.
 
 > **Implementation note (kept in sync with the code):** the foundation hashes canonical JSON with **SHA-256** (a Node built-in — preserves the zero-runtime-dependency rule), not BLAKE3. The algorithm is recorded alongside every hash, so a future move to BLAKE3 is a *tagged migration*, not a flag day. The runtime is **Node ≥ 22.18** (native TypeScript execution).
 
@@ -46,7 +46,7 @@ MemWal is a bet — by the team behind Walrus itself — that "verifiable, porta
 - Not a semantic-recall fact store (MemWal's lane — stay out; integrate later).
 - Not a model router or proxy; we never sit between dev and model.
 - Not a new agent; BATON is infrastructure existing agents read/write through MCP.
-- Not blockchain-visible: no wallet-speak, no "blob," no "epoch" in UX. zkLogin under the hood; the dev sees `baton login` with GitHub.
+- Not blockchain-visible: no wallet-speak, no "blob," no "epoch" in UX. A future zkLogin flow must use a provider supported by Sui; GitHub is not currently one of them.
 
 ---
 ## 2. Core Concepts & Data Model
@@ -127,7 +127,7 @@ Extraction uses the *user's own current model/session* where possible — no BAT
 **SHARE / REVOKE:** `baton share ada@team --read` mints AccessCap + Seal policy add → her `resume` just works. `baton revoke` flips registry + rotates policy → her next fetch decrypts nothing. (Forward-only — §9.)
 
 ### 3.5 Stack (locked)
-TypeScript end-to-end; Node ≥22.18 (native TypeScript execution); Move 2024 edition; testnet during development, mainnet for release (Seal mainnet-ready ✓); no backend server in v1 (CLI + chain + Walrus only — the "we can't rug you" story, sharpened by the MemWal-relayer contrast); web viewer static on Walrus Sites.
+TypeScript end-to-end; Node ≥22.18 (native TypeScript execution); Move 2024 edition; testnet during development, mainnet for release (Seal mainnet-ready ✓). Baton content has no plaintext backend: the CLI talks directly to Sui, Walrus, and Seal. The optional constrained sponsor signs only registration gas and never receives content or user keys. The web viewer is static on Walrus Sites.
 
 ---
 ## 4. User Journeys (write the docs from these)
@@ -167,7 +167,7 @@ The deployed Move package provides `ProjectMemory`, owner capabilities, branch-a
 `baton-mcp` is a project-scoped stdio server built on the official MCP TypeScript SDK. It exposes `baton_status`, `baton_log`, `baton_search`, `baton_show`, `baton_resume`, `baton_verify`, `baton_checkpoint`, and `baton_pass` with strict schemas and truthful read/write/open-world annotations. CLI and MCP share the same verified query, resume, citation, self-report, scrub, and pass engines. Server initialization carries concise agent workflow instructions; writes never print into protocol stdout, self-report snapshots replace latest-truth sections without duplicate retries, and immutable pass creation requires explicit `confirm=true`. Protocol tests spawn a real client/server pair over stdio and exercise discovery, schema validation, reads, writes, error framing, and resume rendering. The npm artifact explicitly allowlists runtime source and README so local settings, tests, and untracked workspace files cannot leak into a release.
 
 **Phase 5 — Identity & sharing**
-Raw-keypair delegated access is complete on Testnet: non-transferable address-bound `AccessCap`s, live recipient verification, generation-safe re-granting, invitation acceptance, delegated recovery, and revocation enforced by Seal key servers. Remaining: zkLogin onboarding (GitHub), sponsored gas (gas station), and broader multi-user Journey C testing.
+Raw-keypair delegated access is complete on Testnet: non-transferable address-bound `AccessCap`s, live recipient verification, generation-safe re-granting, invitation acceptance, delegated recovery, and revocation enforced by Seal key servers. Invitation-scoped sponsored registration is also proven on Testnet with a zero-balance user: user and sponsor sign identical bytes, the sponsor reconstructs only the allowed `create_project` call, concrete gas coins are reserved, and invitations are hashed, one-use, and identity/project-bound. Remaining: zkLogin onboarding through a Sui-supported OAuth provider, public sponsor deployment/operations, and broader multi-user Journey C testing.
 
 **Phase 6 — Viewer & hardening**
 Walrus Sites lineage viewer (DAG, handoff browser, fidelity badges; diff view). Failure-mode hardening — kill wifi mid-pass, corrupt a blob, revoke mid-session; every failure graceful and *narratable*. Self-report mode against ChatGPT web + import path for export zips. Mainnet release. Beta with external devs; collect installs, batons passed, cross-tool resumes, mean fidelity.

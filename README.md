@@ -96,7 +96,7 @@ src/
 - **The store** persists batons and their source attachments under `.baton/` (mirroring git's shape) with atomic writes and verify-on-read.
 - **Renderers and the CLI** are thin; the same engine backs an MCP server so any MCP-compatible tool drives identical logic.
 
-**Built on Sui + Walrus + Seal.** Beyond the local engine, a baton's content lives encrypted on **Walrus** (decentralized blob storage), its hashes, lineage, and fidelity attestations are anchored on **Sui**, and **Seal** provides client-side, policy-based encryption with revocable, capability-based sharing. The complete owner and delegated-reader Testnet paths are implemented and verified against live infrastructure; Mainnet deployment, zkLogin, and sponsored gas remain future work.
+**Built on Sui + Walrus + Seal.** Beyond the local engine, a baton's content lives encrypted on **Walrus** (decentralized blob storage), its hashes, lineage, and fidelity attestations are anchored on **Sui**, and **Seal** provides client-side, policy-based encryption with revocable, capability-based sharing. The complete owner and delegated-reader Testnet paths are implemented and verified against live infrastructure. Invitation-scoped sponsored registration is also live on Testnet; Mainnet deployment and zkLogin remain future work.
 
 ---
 
@@ -158,7 +158,7 @@ Then, in a project directory:
 ```sh
 baton init           # set up .baton/ and auto-wire the Claude Code hook
 baton login          # create/load your protected Sui identity
-baton faucet         # fund it on Testnet (subject to faucet rate limits)
+baton faucet         # fund it on Testnet, or use a sponsor invitation below
 baton fund-storage   # exchange Testnet SUI for WAL storage funds
 baton register       # create this project's on-chain memory object
 # …just work in your agent — checkpoints accrue automatically…
@@ -176,6 +176,23 @@ baton revoke <address>                     # deny future Seal key requests
 
 (In this repo, run commands as `npm run baton -- <command>` until installed globally.)
 
+To register without first owning SUI, use a one-use invitation from a Baton sponsor operator:
+
+```sh
+baton register --sponsor https://sponsor.example --invite <token>
+```
+
+The user signs the exact transaction locally and remains the project owner; the sponsor adds only the gas signature. The client refuses changes to the sender, sponsor, package, project, gas coin, budget, or expiry. Invitations are random, stored only as hashes, bound to one user and project on first use, and cannot be replayed for another registration.
+
+Sponsor operators run the separately installed `baton-sponsor` command behind a TLS reverse proxy:
+
+```sh
+baton-sponsor invite --state /var/lib/baton/sponsor.json --ttl-hours 24
+baton-sponsor serve --state /var/lib/baton/sponsor.json --identity /secure/sponsor-identity.json
+```
+
+The service binds to `127.0.0.1`, signs only Baton's constrained Testnet `create_project` transaction, reserves a concrete gas coin per pending invitation, verifies the user's signature before spending, and never receives the user's private key. Baton does not currently operate a public sponsor endpoint.
+
 With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are graded for fidelity. Without it, Baton still works: checkpoints wait, and `baton pass` produces a useful fallback baton from your git working tree. `baton doctor` tells you exactly what's wired up.
 
 ### Commands
@@ -186,7 +203,7 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 | `baton login` | Create or load the protected Ed25519 identity in `~/.baton/identity.json`. |
 | `baton faucet` | Request SUI for that identity from the official Testnet faucet. |
 | `baton fund-storage [--amount <mist>]` | Exchange Testnet SUI for WAL through the official Walrus exchange. |
-| `baton register [--package <id>] [--rpc <url>]` | Register the project against the canonical Testnet package. |
+| `baton register [--package <id>] [--rpc <url>] [--sponsor <url> --invite <token>]` | Register against the canonical Testnet package, optionally with invitation-scoped sponsored gas. |
 | `baton publish` | Resume every queued baton through Seal encryption, Walrus certification, and Sui anchoring. |
 | `baton fetch <full-id>` | Recover and authenticate a missing baton and all attachments from Sui, Walrus, and Seal. |
 | `baton share <address> [--out <file>]` | Grant address-bound read access on Sui and write a public invitation. |
@@ -228,7 +245,7 @@ Handoffs are clearly the primitive every agent vendor wants — Cursor and Codex
 
 Baton is the handoff layer **nobody owns but you**: encrypted client-side, stored on neutral infrastructure, verifiable on-chain, shareable and revocable.
 
-The complete owner-controlled storage path and raw-keypair delegated-reader path are deployed and verified on Testnet: Seal encryption/decryption, resumable Walrus storage/retrieval, Sui manifest anchoring, attachment restoration, automatic recovery during `resume`, address-bound sharing, and on-chain revocation all run against live infrastructure. Exact object, blob, hash, capability, and transaction evidence lives in [docs/deployments.md](docs/deployments.md). zkLogin, sponsored gas, external beta hardening, and Mainnet deployment remain in progress, so Baton does not yet claim Mainnet readiness.
+The complete owner-controlled storage path and raw-keypair delegated-reader path are deployed and verified on Testnet: Seal encryption/decryption, resumable Walrus storage/retrieval, Sui manifest anchoring, attachment restoration, automatic recovery during `resume`, address-bound sharing, on-chain revocation, and invitation-scoped sponsored registration all run against live infrastructure. Exact object, blob, hash, capability, and transaction evidence lives in [docs/deployments.md](docs/deployments.md). A public sponsor deployment, zkLogin, external beta hardening, and Mainnet deployment remain in progress, so Baton does not yet claim Mainnet readiness.
 
 ---
 

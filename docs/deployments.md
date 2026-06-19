@@ -102,4 +102,21 @@ On 2026-06-19, an existing owner-controlled project published a new child baton 
 
 After revocation, the recipient's local copy was removed and a fresh remote fetch was attempted. Walrus retrieval still succeeded, but Seal denied the key request with `User does not have access to one or more of the requested keys`. A separate clean owner directory then fetched and decrypted the same baton successfully, proving revocation affected the delegate without damaging owner recovery.
 
-Revocation is forward-only: it cannot erase plaintext already fetched by a recipient. zkLogin, sponsored gas, external beta hardening, and Mainnet deployment remain unproven and are not claimed here.
+Revocation is forward-only: it cannot erase plaintext already fetched by a recipient. The separate sponsored-registration proof follows; zkLogin, external beta hardening, and Mainnet deployment remain unproven and are not claimed here.
+
+## Live sponsored registration evidence
+
+On 2026-06-19, a newly generated Baton identity with no Testnet coins registered a clean project through the constrained sponsor service. The user and sponsor signed the same transaction bytes; the chain recorded the user as sender and project owner while charging only the sponsor-owned gas coin.
+
+| Item | Value |
+|---|---|
+| Zero-balance user | `0x1e3c764b8d893cba1d4b0fa6751acd108e4bc80658d2685ee3b3934d57b7a826` |
+| Sponsor | `0x6885ce4d049be8fe3dddc8f3bc8abf0b6d627657cc397005f3f5aa7ada289fab` |
+| Registration transaction | `12ttjkj8zUDX4ASKxdyZ8KdWuhrQbnnZFDsRs2mcHnSC` |
+| `ProjectMemory` | `0xfdd46a9a26d121b1905a5653f0ed7ea39457bbd9418edd68e12e83565d8f72f5` |
+| User-owned `OwnerCap` | `0x875260d188d9111ec842894c34feac91a97eb86f7a2aa6929ae2d28b2ac9f8d8` |
+| Sponsor gas cost | `4,536,280 MIST` |
+
+The final transaction contains two signatures, calls only the v2 `memory::create_project` entry point, and creates both original-package-typed objects for the user. A direct balance query still returned no coins for the user after execution. The invitation state contained only the token's SHA-256 hash, recorded the durable result, and rejected a second identity attempting a different registration with the same token.
+
+This proves the invitation-scoped Testnet sponsorship path, not a public hosted gas station. The shipped service binds to loopback for placement behind operator-managed TLS, rate-limits requests, bounds request bodies and gas, reserves one concrete sponsor coin per pending registration, verifies the user's transaction signature before spending, and never signs caller-supplied transaction bytes. Public service operations, abuse economics, zkLogin, external beta hardening, and Mainnet deployment remain unproven and are not claimed here.

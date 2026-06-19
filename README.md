@@ -96,7 +96,7 @@ src/
 - **The store** persists batons and their source attachments under `.baton/` (mirroring git's shape) with atomic writes and verify-on-read.
 - **Renderers and the CLI** are thin; the same engine backs an MCP server so any MCP-compatible tool drives identical logic.
 
-**Built on Sui + Walrus + Seal.** Beyond the local engine, a baton's content lives encrypted on **Walrus** (decentralized blob storage), its hashes, lineage, and fidelity attestations are anchored on **Sui**, and **Seal** provides client-side, policy-based encryption with revocable, capability-based sharing. *Today the engine runs fully locally — content-addressed and verifiable on your machine — which is the same trust primitive the networked layers extend.*
+**Built on Sui + Walrus + Seal.** Beyond the local engine, a baton's content lives encrypted on **Walrus** (decentralized blob storage), its hashes, lineage, and fidelity attestations are anchored on **Sui**, and **Seal** provides client-side, policy-based encryption with revocable, capability-based sharing. *Today the local engine, crash-safe publication queue, encrypted payload cache, and Seal adapter are implemented. Walrus transport and Sui registration/anchoring are the next network slices.*
 
 ---
 
@@ -139,7 +139,7 @@ Different tools expose different ground truth, so Baton has one protocol with se
 
 ## Getting started
 
-Requires **Node ≥ 22.18** (runs TypeScript natively). Zero runtime dependencies.
+Requires **Node ≥ 22.18** (runs TypeScript natively). The pure core has zero runtime dependencies; network adapters use the official Mysten SDKs.
 
 ```sh
 npm install          # dev deps only (typescript, @types/node)

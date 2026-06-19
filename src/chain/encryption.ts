@@ -35,7 +35,10 @@ export function validateEncryptionPolicy(policy: EncryptionPolicy): EncryptionPo
 }
 
 /** Seal identities bind the ciphertext to both its project and content hash. */
-export function sealIdentity(projectObjectId: string, blob: UploadBlob): string {
+export function sealIdentity(
+  projectObjectId: string,
+  blob: Pick<UploadBlob, "contentHash">,
+): string {
   const project = projectObjectId.slice(2).toLowerCase().padStart(64, "0");
   return `0x${project}${blob.contentHash}`;
 }

@@ -23,6 +23,7 @@ import { runRegister } from "./commands/register.ts";
 import { runFaucet } from "./commands/faucet.ts";
 import { runPublish } from "./commands/publish.ts";
 import { runFundStorage } from "./commands/fund-storage.ts";
+import { runFetch } from "./commands/fetch.ts";
 import { TOOL_IDS, type ToolId } from "../schema/handoff.ts";
 import { RULES_TARGETS, type RulesFormat } from "../render/rules.ts";
 
@@ -37,6 +38,7 @@ Commands:
   fund-storage exchange Testnet SUI for WAL storage funds
   register     register this project on Sui Testnet
   publish      encrypt, store, and anchor every queued baton
+  fetch <id>   recover and verify a full baton from Sui, Walrus, and Seal
   status       show the current working state
   pass         seal the current working state into a handoff (commit)
   log          list handoffs, newest first (* = head)
@@ -121,6 +123,16 @@ function main(argv: string[]): void {
     case "publish":
       void runPublish(process.cwd()).catch(die);
       return;
+    case "fetch": {
+      const id = rest[0];
+      if (rest.length !== 1 || !id) {
+        process.stderr.write("usage: baton fetch <full-handoff-id>\n");
+        process.exitCode = 2;
+        return;
+      }
+      void runFetch(process.cwd(), id).catch(die);
+      return;
+    }
     case "checkpoint":
       // Hook handler: must never disrupt the host session — always exit 0.
       void runCheckpoint().finally(() => process.exit(0));
@@ -158,7 +170,8 @@ function main(argv: string[]): void {
         receivingTool = value as ToolId;
       }
       const id = rest.find((a, i) => !a.startsWith("--") && rest[i - 1] !== "--tool");
-      return runResume(process.cwd(), id, receivingTool);
+      void runResume(process.cwd(), id, receivingTool).catch(die);
+      return;
     }
     case "verify": {
       const claimId = rest[0];

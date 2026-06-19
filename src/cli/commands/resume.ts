@@ -3,6 +3,7 @@ import { ProjectStore } from "../../store/project.ts";
 import { renderResumePrompt, type LineageNode } from "../../render/resume.ts";
 import type { ToolId } from "../../schema/handoff.ts";
 import { resolveHandoffId } from "../resolve.ts";
+import { ensureHandoffAvailable, recoverHandoffFromRemote } from "../remote.ts";
 
 const MAX_LINEAGE = 8;
 
@@ -13,10 +14,12 @@ const MAX_LINEAGE = 8;
  * came from. Output goes to stdout for piping/injection; the MCP server
  * (phase 4) will inject the same rendering directly into the tool.
  */
-export function runResume(cwd: string, idPrefix?: string, receivingTool?: ToolId): void {
+export async function runResume(cwd: string, idPrefix?: string, receivingTool?: ToolId): Promise<void> {
   const store = ProjectStore.open(cwd);
   const id = resolveHandoffId(store, idPrefix);
-  const handoff = store.loadHandoff(id); // verifies the hash before we render it
+  const handoff = await ensureHandoffAvailable(store, id, (missingId) =>
+    recoverHandoffFromRemote(store, missingId)
+  );
 
   // First-parent chain, nearest first, starting with this handoff.
   const chain: LineageNode[] = [{ shortId: shortId(id), tool: handoff.meta.tool }];

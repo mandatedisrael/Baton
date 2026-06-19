@@ -9,6 +9,9 @@ export function resolveHandoffId(store: ProjectStore, idPrefix?: string): string
     return head;
   }
   const matches = store.listHandoffIds().filter((id) => id.startsWith(idPrefix));
+  // A full content id is sufficient to query the on-chain manifest even when
+  // this machine has never seen the baton locally.
+  if (matches.length === 0 && /^[a-f0-9]{64}$/.test(idPrefix)) return idPrefix;
   if (matches.length === 0) throw new BatonError("NOT_FOUND", `no baton matching "${idPrefix}"`);
   if (matches.length > 1) {
     throw new BatonError("NOT_FOUND", `ambiguous id "${idPrefix}" (${matches.length} matches)`);

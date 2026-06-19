@@ -40,7 +40,6 @@ export function runInit(cwd: string, opts: InitOptions = {}): void {
   // Print MCP setup hints for Codex, Cursor, and generic clients so agents can call tools directly.
   console.log("\nAgent integration:");
   console.log("  Claude Code: hook installed — checkpoints happen automatically on Stop.");
-  console.log("  CLAUDE.md created with starter content (edit freely; Baton manages the marked section).");
   console.log("  For Codex / Cursor / other MCP clients, add this to your MCP config:");
   console.log(
     '    {\n' +

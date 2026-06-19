@@ -1,6 +1,9 @@
 import type { RemoteProjectConfig } from "../schema/project.ts";
 
 export const TESTNET_RPC_URL = "https://fullnode.testnet.sui.io:443";
+export const BATON_CORE_TESTNET_PACKAGE =
+  "0x74020a1a00779799768a5145bd2734f3e724d2826c5e8d610f345c2c036b090e";
+export const BATON_CORE_TESTNET_PUBLISH_TX = "7LcCCbj38X9zDiv5GaAkprQbFa2vNGEC2gnRZzKG8tzh";
 
 /** Mysten's verified decentralized Testnet Seal committee. */
 export const TESTNET_SEAL: RemoteProjectConfig["seal"] = {

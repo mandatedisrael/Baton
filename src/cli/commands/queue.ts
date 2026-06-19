@@ -3,7 +3,8 @@ import { ProjectStore } from "../../store/project.ts";
 import { encryptQueuedJob } from "../../chain/payloads.ts";
 import { createSealPayloadEncryptor } from "../../chain/seal.ts";
 import { BatonError } from "../../core/errors.ts";
-import { loadIdentity, getIdentityAddress, requireEd25519Identity } from "../../chain/identity.ts";
+import { loadIdentity, isZkLoginIdentity, requireEd25519Identity } from "../../chain/identity.ts";
+import { loadEphemeralFromSession } from "../../chain/zklogin.ts";
 import { createWalrusUploader } from "../../chain/walrus.ts";
 import { uploadQueuedJob } from "../../chain/upload.ts";
 import { anchorQueuedJob } from "../../chain/anchor.ts";
@@ -65,7 +66,9 @@ export async function runQueueUpload(cwd: string, identityPath?: string): Promis
     throw new BatonError("INVALID_STATE", "project is local-only — run `baton login` then `baton register`");
   }
   const loaded = loadIdentity(identityPath);
-  const { keypair } = requireEd25519Identity(loaded); // uploader still needs key material for now
+  const keypair = isZkLoginIdentity(loaded)
+    ? loadEphemeralFromSession(loaded.session)
+    : requireEd25519Identity(loaded).keypair;
   const uploader = createWalrusUploader({ remote, keypair });
   const jobs = store.listUploadJobs();
   const unencrypted = jobs.filter((job) => job.blobs.some((blob) => blob.status === "pending"));
@@ -99,8 +102,6 @@ export async function runQueueAnchor(cwd: string, identityPath?: string): Promis
   }
   const loaded = loadIdentity(identityPath);
   const client = new SuiJsonRpcClient({ network: remote.network, url: remote.rpcUrl });
-  // Note: anchor uses keypair for now; full zk support in future commit
-  const { keypair } = requireEd25519Identity(loaded);
   const jobs = store.listUploadJobs();
   const notUploaded = jobs.filter((job) => job.blobs.some((blob) => blob.status !== "uploaded"));
   if (notUploaded.length > 0) {
@@ -118,7 +119,7 @@ export async function runQueueAnchor(cwd: string, identityPath?: string): Promis
       store,
       handoffId: queued.handoffId,
       client,
-      keypair,
+      identity: loaded,
       remote,
     });
     if (result.job.status === "failed" || !result.sidecar) {

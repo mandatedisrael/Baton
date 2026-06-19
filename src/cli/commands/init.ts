@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { ProjectStore } from "../../store/project.ts";
 import { installHooks } from "../hooks.ts";
 import { ok, warn } from "../output.ts";
+import { runRender } from "./render.ts";
 
 export interface InitOptions {
   /** Skip Claude Code hook installation (`baton init --no-hooks`). */
@@ -36,8 +37,32 @@ export function runInit(cwd: string, opts: InitOptions = {}): void {
     warn("ANTHROPIC_API_KEY not set — checkpoints will distill once it is; `baton pass` works now via the git fallback");
   }
 
+  // Print MCP setup hints for Codex, Cursor, and generic clients so agents can call tools directly.
+  console.log("\nAgent integration:");
+  console.log("  Claude Code: hook installed — checkpoints happen automatically on Stop.");
+  console.log("  For Codex / Cursor / other MCP clients, add this to your MCP config:");
   console.log(
-    "\nnext: just work in Claude Code — checkpoints accrue automatically.\n" +
-      "      `baton status` to inspect · `baton pass` to seal a handoff · `baton resume` to pick it up",
+    "    {\n" +
+      '      "mcpServers": {\n' +
+      '        "baton": {\n' +
+      '          "command": "baton-mcp",\n' +
+      `          "args": ["--project", "${store.root}"]\n` +
+      "        }\n" +
+      "      }\n" +
+      "    }",
+  );
+  console.log("  Then start sessions with `baton resume` (or let the agent call it).");
+
+  // Auto-generate a CLAUDE.md for immediate agent awareness (non-destructive if exists).
+  // Only if there's already a head baton (otherwise render will no-op with warning).
+  try {
+    runRender(store.root, "claude-md", undefined, true);
+    ok("wrote CLAUDE.md with current baton context (re-runnable via `baton render claude-md --write`)");
+  } catch {
+    warn("skipped auto-rendering CLAUDE.md (run `baton render claude-md --write` manually if desired)");
+  }
+
+  console.log(
+    "\nnext: just work — checkpoints accrue. Use `baton status`, `baton pass`, or tell your agent to use baton_* MCP tools.",
   );
 }

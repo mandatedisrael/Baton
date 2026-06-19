@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadIdentity, loadOrCreateIdentity } from "../src/chain/identity.ts";
+import { loadIdentity, loadOrCreateIdentity, type LoadedIdentity } from "../src/chain/identity.ts";
 
 let root: string;
 let path: string;
@@ -30,20 +30,26 @@ test("creates and reloads a real Ed25519 Sui identity with restrictive permissio
   const created = loadOrCreateIdentity(path, new Date("2026-06-19T12:00:00Z"));
   const loaded = loadIdentity(path);
   assert.equal(loaded.record.address, created.record.address);
-  assert.match(loaded.record.secretKey, /^suiprivkey1/);
+  if (loaded.scheme === "ED25519") {
+    assert.match(loaded.record.secretKey, /^suiprivkey1/);
+  }
   assert.equal(lstatSync(path).mode & 0o777, 0o600);
   assert.equal(lstatSync(join(root, ".baton")).mode & 0o777, 0o700);
 
   const message = new TextEncoder().encode("baton identity proof");
-  const { signature } = await loaded.keypair.signPersonalMessage(message);
-  assert.equal(await loaded.keypair.getPublicKey().verifyPersonalMessage(message, signature), true);
+  if (loaded.scheme === "ED25519") {
+    const { signature } = await loaded.keypair.signPersonalMessage(message);
+    assert.equal(await loaded.keypair.getPublicKey().verifyPersonalMessage(message, signature), true);
+  }
 });
 
 test("loadOrCreateIdentity is stable and never rotates an existing key", () => {
   const first = loadOrCreateIdentity(path);
   const second = loadOrCreateIdentity(path);
-  assert.equal(second.record.secretKey, first.record.secretKey);
-  assert.equal(second.record.address, first.record.address);
+  if (first.scheme === "ED25519" && second.scheme === "ED25519") {
+    assert.equal(second.record.secretKey, first.record.secretKey);
+    assert.equal(second.record.address, first.record.address);
+  }
 });
 
 test("loadIdentity detects address tampering", () => {

@@ -54,6 +54,6 @@ test("renderQueueStatus summarizes progress and failures", () => {
     }),
   ]);
   assert.match(output, /1 pending · 1 failed/);
-  assert.match(output, /aaaaaaaaaaaa  pending\s+0\/1 blobs · 0 attempts/);
-  assert.match(output, /bbbbbbbbbbbb  failed\s+1\/1 blobs · 2 attempts · Walrus unavailable/);
+  assert.match(output, /aaaaaaaaaaaa  pending\s+0 encrypted · 0\/1 uploaded · 0 attempts/);
+  assert.match(output, /bbbbbbbbbbbb  failed\s+0 encrypted · 1\/1 uploaded · 2 attempts · Walrus unavailable/);
 });

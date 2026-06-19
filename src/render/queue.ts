@@ -13,10 +13,11 @@ export function renderQueueStatus(jobs: UploadJob[]): string {
     .join(" · ");
 
   const rows = jobs.map((job) => {
+    const encrypted = job.blobs.filter((blob) => blob.status === "encrypted").length;
     const uploaded = job.blobs.filter((blob) => blob.status === "uploaded").length;
     const attempts = job.attempts === 1 ? "1 attempt" : `${job.attempts} attempts`;
     const error = job.lastError ? ` · ${job.lastError}` : "";
-    return `${shortId(job.handoffId)}  ${job.status.padEnd(9)}  ${uploaded}/${job.blobs.length} blobs · ${attempts}${error}`;
+    return `${shortId(job.handoffId)}  ${job.status.padEnd(9)}  ${encrypted} encrypted · ${uploaded}/${job.blobs.length} uploaded · ${attempts}${error}`;
   });
 
   return [`Remote publication queue: ${summary}`, "", ...rows, ""].join("\n");

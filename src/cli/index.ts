@@ -38,7 +38,7 @@ Usage: baton <command>
 
 Commands:
   init         initialize a baton project in the current directory
-  login        create or load the user's protected Sui identity
+  login        create or load the user's protected Sui identity (use --zk for Google zkLogin)
   faucet       fund that identity from the official Testnet faucet
   fund-storage exchange Testnet SUI for WAL storage funds
   register     register this project on Sui Testnet
@@ -100,8 +100,19 @@ function main(argv: string[]): void {
       return;
     case "init":
       return runInit(process.cwd(), { hooks: !rest.includes("--no-hooks") });
-    case "login":
-      return runLogin();
+    case "login": {
+      const zk = rest.includes("--zk") || rest.includes("--google");
+      let clientId: string | undefined;
+      for (let i = 0; i < rest.length; i++) {
+        const val = rest[i + 1];
+        if (rest[i] === "--client-id" && val && !val.startsWith("--")) {
+          clientId = val;
+          break;
+        }
+      }
+      void runLogin({ zk, clientId }).catch(die);
+      return;
+    }
     case "faucet":
       void runFaucet().catch(die);
       return;

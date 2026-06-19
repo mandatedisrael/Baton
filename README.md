@@ -150,8 +150,12 @@ Then, in a project directory:
 
 ```sh
 baton init           # set up .baton/ and auto-wire the Claude Code hook
+baton login          # create/load your protected Sui identity
+baton faucet         # fund it on Testnet (subject to faucet rate limits)
+baton register       # create this project's on-chain memory object
 # …just work in your agent — checkpoints accrue automatically…
 baton pass           # seal the working state into a baton
+baton queue encrypt  # encrypt queued payloads through Seal
 baton resume         # render the resume prompt for the next agent
 ```
 
@@ -164,6 +168,9 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 | Command | What it does |
 |---|---|
 | `baton init [--no-hooks]` | Initialize a project and register the Claude Code checkpoint hook. |
+| `baton login` | Create or load the protected Ed25519 identity in `~/.baton/identity.json`. |
+| `baton faucet` | Request SUI for that identity from the official Testnet faucet. |
+| `baton register [--package <id>] [--rpc <url>]` | Register the project against the canonical Testnet package. |
 | `baton status` | Show the current working state. |
 | `baton pass` | Seal the working state into a baton (commit). |
 | `baton log` | List batons, newest first (`*` marks the head). |
@@ -171,6 +178,7 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 | `baton resume [id] [--tool <id>]` | Render the resume prompt for a baton (head if omitted). |
 | `baton verify <claim-id> [id]` | Verify and print the sealed source lines behind a decision or graveyard entry. |
 | `baton queue status` | Show crash-safe progress for batons waiting to be published remotely. |
+| `baton queue encrypt` | Encrypt pending canonical handoffs and attachments through Seal. |
 | `baton render <claude-md\|agents-md\|cursorrules> [id] [--write]` | Project a baton into a per-tool rules file. |
 | `baton install` / `uninstall` | Add or remove the Claude Code checkpoint hook. |
 | `baton doctor` | Diagnose the install and verify local batons. |
@@ -185,6 +193,8 @@ Handoffs are clearly the primitive every agent vendor wants — Cursor and Codex
 - Memory products extract atomic *facts* and discard the source. Baton hands off full *working state* — as verifiable commits — and keeps the source, cited.
 
 Baton is the handoff layer **nobody owns but you**: encrypted client-side, stored on neutral infrastructure, verifiable on-chain, shareable and revocable.
+
+The Move package and registration/encryption flow are deployed and verified on Testnet; exact object and transaction evidence lives in [docs/deployments.md](docs/deployments.md). Walrus upload, manifest anchoring, and remote decryption are still in progress, so Baton does not yet claim Mainnet readiness.
 
 ---
 

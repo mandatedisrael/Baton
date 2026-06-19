@@ -52,10 +52,10 @@ function job(): UploadJob {
 
 test("Seal identity and AAD bind ciphertext to its queue slot", () => {
   const target = blob();
-  assert.equal(sealIdentity(target), `0x${target.contentHash}`);
+  assert.equal(sealIdentity("0x1234", target), `0x${"1234".padStart(64, "0")}${target.contentHash}`);
   assert.equal(
-    new TextDecoder().decode(sealAad(HANDOFF_ID, target)),
-    `baton:v1:${HANDOFF_ID}:attachment:transcript-1:${target.contentHash}`,
+    new TextDecoder().decode(sealAad("0x1234", HANDOFF_ID, target)),
+    `baton:v1:0x1234:${HANDOFF_ID}:attachment:transcript-1:${target.contentHash}`,
   );
 });
 
@@ -76,16 +76,23 @@ test("encryptBlob verifies plaintext before crossing the provider boundary", asy
   };
   const encrypted = await encryptBlob(
     fake,
-    { packageId: "0x1234", threshold: 2 },
+    { packageId: "0x1234", projectObjectId: "0x5678", threshold: 2 },
     HANDOFF_ID,
     blob(),
     PLAINTEXT,
   );
   assert.deepEqual(encrypted, new Uint8Array([9, 8, 7]));
-  assert.equal(request?.identity, `0x${hashBytes(PLAINTEXT)}`);
+  assert.equal(request?.identity, `0x${"5678".padStart(64, "0")}${hashBytes(PLAINTEXT)}`);
   assert.equal(request?.threshold, 2);
   await assert.rejects(
-    () => encryptBlob(fake, { packageId: "0x1234", threshold: 2 }, HANDOFF_ID, blob(), new Uint8Array([0])),
+    () =>
+      encryptBlob(
+        fake,
+        { packageId: "0x1234", projectObjectId: "0x5678", threshold: 2 },
+        HANDOFF_ID,
+        blob(),
+        new Uint8Array([0]),
+      ),
     /refusing to encrypt/,
   );
 });

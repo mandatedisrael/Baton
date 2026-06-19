@@ -17,6 +17,7 @@ export interface PayloadEncryptor {
 
 export interface EncryptionPolicy {
   packageId: string;
+  projectObjectId: string;
   threshold: number;
 }
 
@@ -24,21 +25,25 @@ export function validateEncryptionPolicy(policy: EncryptionPolicy): EncryptionPo
   if (!/^0x[a-fA-F0-9]+$/.test(policy.packageId)) {
     throw new BatonError("INVALID_STATE", "Seal package id must be a 0x-prefixed hex value");
   }
+  if (!/^0x[a-fA-F0-9]{1,64}$/.test(policy.projectObjectId)) {
+    throw new BatonError("INVALID_STATE", "project object id must be a 0x-prefixed Sui address");
+  }
   if (!Number.isInteger(policy.threshold) || policy.threshold < 1) {
     throw new BatonError("INVALID_STATE", "Seal threshold must be a positive integer");
   }
   return policy;
 }
 
-/** Seal identities are deterministic and bound to the plaintext content hash. */
-export function sealIdentity(blob: UploadBlob): string {
-  return `0x${blob.contentHash}`;
+/** Seal identities bind the ciphertext to both its project and content hash. */
+export function sealIdentity(projectObjectId: string, blob: UploadBlob): string {
+  const project = projectObjectId.slice(2).toLowerCase().padStart(64, "0");
+  return `0x${project}${blob.contentHash}`;
 }
 
 /** Additional authenticated data prevents a valid ciphertext being swapped between queue slots. */
-export function sealAad(handoffId: string, blob: UploadBlob): Uint8Array {
+export function sealAad(projectObjectId: string, handoffId: string, blob: UploadBlob): Uint8Array {
   return new TextEncoder().encode(
-    ["baton", "v1", handoffId, blob.kind, blob.id, blob.contentHash].join(":"),
+    ["baton", "v1", projectObjectId.toLowerCase(), handoffId, blob.kind, blob.id, blob.contentHash].join(":"),
   );
 }
 
@@ -107,9 +112,9 @@ export async function encryptBlob(
   }
   return encryptor.encrypt({
     packageId: policy.packageId,
-    identity: sealIdentity(blob),
+    identity: sealIdentity(policy.projectObjectId, blob),
     threshold: policy.threshold,
     data: plaintext,
-    aad: sealAad(handoffId, blob),
+    aad: sealAad(policy.projectObjectId, handoffId, blob),
   });
 }

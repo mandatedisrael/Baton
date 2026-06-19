@@ -69,7 +69,7 @@ test("encryptQueuedJob checkpoints each encrypted payload durably", async () => 
     store,
     id,
     encryptor,
-    { packageId: "0x1234", threshold: 1 },
+    { packageId: "0x1234", projectObjectId: "0x5678", threshold: 1 },
     new Date("2026-06-19T12:01:00Z"),
   );
   assert.equal(job.status, "uploading");
@@ -91,7 +91,11 @@ test("encryptQueuedJob preserves completed blobs when a later encryption fails",
       return Buffer.concat([Buffer.from("sealed:"), request.data]);
     },
   };
-  const job = await encryptQueuedJob(store, id, encryptor, { packageId: "0x1234", threshold: 1 });
+  const job = await encryptQueuedJob(store, id, encryptor, {
+    packageId: "0x1234",
+    projectObjectId: "0x5678",
+    threshold: 1,
+  });
   assert.equal(job.status, "failed");
   assert.equal(job.lastError, "key server unavailable");
   assert.equal(job.blobs[0]!.status, "encrypted");
@@ -106,7 +110,11 @@ test("encrypted payload tampering is refused on read", async () => {
       return Buffer.concat([Buffer.from("sealed:"), request.data]);
     },
   };
-  const job = await encryptQueuedJob(store, id, encryptor, { packageId: "0x1234", threshold: 1 });
+  const job = await encryptQueuedJob(store, id, encryptor, {
+    packageId: "0x1234",
+    projectObjectId: "0x5678",
+    threshold: 1,
+  });
   const blob = job.blobs[0]!;
   writeFileSync(encryptedPayloadPath(root, id, blob.contentHash), "tampered");
   assert.throws(() => store.loadEncryptedPayload(job, blob.id), /failed verification/);

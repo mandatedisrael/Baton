@@ -207,7 +207,7 @@ export function requireEd25519Identity(loaded: LoadedIdentity): { record: Ed2551
   if (loaded.scheme !== "ED25519") {
     throw new BatonError(
       "INVALID_STATE",
-      "This command currently requires an Ed25519 identity (created with the default `baton login`). zkLogin support for this operation is coming in the next change. Use a raw keypair identity or run `baton login` without --zk."
+      "This command requires an Ed25519 identity for now (Seal or certain Walrus ops). Use `baton login` (without --zk) for a raw keypair, or a separate ED identity for these ops."
     );
   }
   return loaded;

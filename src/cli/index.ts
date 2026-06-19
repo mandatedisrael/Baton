@@ -22,6 +22,7 @@ import { runLogin } from "./commands/login.ts";
 import { runRegister } from "./commands/register.ts";
 import { runFaucet } from "./commands/faucet.ts";
 import { runPublish } from "./commands/publish.ts";
+import { runFundStorage } from "./commands/fund-storage.ts";
 import { TOOL_IDS, type ToolId } from "../schema/handoff.ts";
 import { RULES_TARGETS, type RulesFormat } from "../render/rules.ts";
 
@@ -33,6 +34,7 @@ Commands:
   init         initialize a baton project in the current directory
   login        create or load the user's protected Sui identity
   faucet       fund that identity from the official Testnet faucet
+  fund-storage exchange Testnet SUI for WAL storage funds
   register     register this project on Sui Testnet
   publish      encrypt, store, and anchor every queued baton
   status       show the current working state
@@ -60,6 +62,7 @@ Options:
   --write           (render) upsert the rules file instead of printing to stdout
   --package <id>    (register) override the canonical Baton package
   --rpc <url>       (register) override the Testnet RPC endpoint
+  --amount <mist>   (fund-storage) SUI MIST to exchange (default 100000000)
 `;
 
 const VERSION = "0.1.0";
@@ -85,6 +88,19 @@ function main(argv: string[]): void {
     case "faucet":
       void runFaucet().catch(die);
       return;
+    case "fund-storage": {
+      let amount = 100_000_000n;
+      if (rest.length > 0) {
+        if (rest.length !== 2 || rest[0] !== "--amount" || !/^\d+$/.test(rest[1]!)) {
+          process.stderr.write("usage: baton fund-storage [--amount <mist>]\n");
+          process.exitCode = 2;
+          return;
+        }
+        amount = BigInt(rest[1]!);
+      }
+      void runFundStorage(amount).catch(die);
+      return;
+    }
     case "register": {
       let packageId: string | undefined;
       let rpcUrl: string | undefined;

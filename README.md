@@ -184,14 +184,15 @@ baton register --sponsor https://sponsor.example --invite <token>
 
 The user signs the exact transaction locally and remains the project owner; the sponsor adds only the gas signature. The client refuses changes to the sender, sponsor, package, project, gas coin, budget, or expiry. Invitations are random, stored only as hashes, bound to one user and project on first use, and cannot be replayed for another registration.
 
-Sponsor operators run the separately installed `baton-sponsor` command behind a TLS reverse proxy:
+For the safest invitation, the user sends the operator the address printed by `baton login` and the project ID printed by `baton status`. The operator binds both before sharing the token:
 
 ```sh
-baton-sponsor invite --state /var/lib/baton/sponsor.json --ttl-hours 24
+baton-sponsor invite --state /var/lib/baton/sponsor.json --ttl-hours 24 \
+  --recipient 0xUSER --project PROJECT_ID
 baton-sponsor serve --state /var/lib/baton/sponsor.json --identity /secure/sponsor-identity.json
 ```
 
-The service binds to `127.0.0.1`, signs only Baton's constrained Testnet `create_project` transaction, reserves a concrete gas coin per pending invitation, verifies the user's signature before spending, and never receives the user's private key. Baton does not currently operate a public sponsor endpoint.
+The service binds to `127.0.0.1`, signs only Baton's constrained Testnet `create_project` transaction, reserves a concrete gas coin per pending invitation, verifies the user's signature before spending, and never receives the user's private key. File-backed state operations are atomically serialized across the live daemon and operator processes. Operators can inspect invitation status with `baton-sponsor list [--json]`, revoke an unused invitation with `baton-sponsor revoke --id <id>`, and remove expired or revoked records with `baton-sponsor prune`; completed results remain as durable audit records. Baton does not currently operate a public sponsor endpoint.
 
 With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are graded for fidelity. Without it, Baton still works: checkpoints wait, and `baton pass` produces a useful fallback baton from your git working tree. `baton doctor` tells you exactly what's wired up.
 

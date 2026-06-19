@@ -120,3 +120,21 @@ On 2026-06-19, a newly generated Baton identity with no Testnet coins registered
 The final transaction contains two signatures, calls only the v2 `memory::create_project` entry point, and creates both original-package-typed objects for the user. A direct balance query still returned no coins for the user after execution. The invitation state contained only the token's SHA-256 hash, recorded the durable result, and rejected a second identity attempting a different registration with the same token.
 
 This proves the invitation-scoped Testnet sponsorship path, not a public hosted gas station. The shipped service binds to loopback for placement behind operator-managed TLS, rate-limits requests, bounds request bodies and gas, reserves one concrete sponsor coin per pending registration, verifies the user's transaction signature before spending, and never signs caller-supplied transaction bytes. Public service operations, abuse economics, zkLogin, external beta hardening, and Mainnet deployment remain unproven and are not claimed here.
+
+## Bound invitation and live operator-control evidence
+
+On 2026-06-19, a fresh invitation was pre-bound to a specific zero-balance Baton identity and local project ID, then used through the running sponsor daemon. Inspection ran concurrently through the operator CLI and returned the durable used result. A second bound invitation was issued and revoked while the daemon remained online; its registration prepare request was refused, and pruning removed the revoked record without deleting the completed audit result.
+
+| Item | Value |
+|---|---|
+| Zero-balance user | `0x4313c02b397ffd8f51e259e931fb36af1cddcb919c896c92739a1fe87cae7c28` |
+| Bound project ID | `b850855c-0066-496c-830d-bea54eb833c0` |
+| Sponsor | `0x6885ce4d049be8fe3dddc8f3bc8abf0b6d627657cc397005f3f5aa7ada289fab` |
+| Registration transaction | `HcmxyxYj9xEPxim7UWDesTWG1kB7hAP6eTxVMq2v39Z8` |
+| `ProjectMemory` | `0x202687045dca3605b857545c8624a53a56bce42d99a2bd1c640042f1924910d1` |
+| User-owned `OwnerCap` | `0xa73469286317b1ca0dfcc52b67f56616f90011d922f41637f902cd0ce529df23` |
+| Sponsor gas cost | `4,536,280 MIST` |
+
+The successful transaction has two signatures, records the bound user as sender, charges the sponsor as gas owner, and leaves the user with no SUI coins. The sponsor state contains the invitation ID, recipient, project ID, request ID, and result digest—but only a SHA-256 hash of the bearer token. Transaction-scoped file locking serializes live HTTP and operator CLI mutations, preventing concurrent processes from losing invitation updates or double-reserving the same gas coin.
+
+This proves the local operator-control implementation against live Testnet infrastructure. It does not claim an Internet-facing deployment, managed TLS, monitoring, denial-of-service resilience, or production abuse economics.

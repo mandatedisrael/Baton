@@ -1,9 +1,9 @@
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ProjectStore } from "../../store/project.ts";
 import { installHooks } from "../hooks.ts";
 import { ok, warn } from "../output.ts";
-import { runRender } from "./render.ts";
+
 
 export interface InitOptions {
   /** Skip Claude Code hook installation (`baton init --no-hooks`). */
@@ -40,29 +40,70 @@ export function runInit(cwd: string, opts: InitOptions = {}): void {
   // Print MCP setup hints for Codex, Cursor, and generic clients so agents can call tools directly.
   console.log("\nAgent integration:");
   console.log("  Claude Code: hook installed — checkpoints happen automatically on Stop.");
+  console.log("  CLAUDE.md created with starter content (edit freely; Baton manages the marked section).");
   console.log("  For Codex / Cursor / other MCP clients, add this to your MCP config:");
   console.log(
-    "    {\n" +
+    '    {\n' +
       '      "mcpServers": {\n' +
       '        "baton": {\n' +
       '          "command": "baton-mcp",\n' +
       `          "args": ["--project", "${store.root}"]\n` +
-      "        }\n" +
-      "      }\n" +
-      "    }",
+      '        }\n' +
+      '      }\n' +
+      '    }',
   );
   console.log("  Then start sessions with `baton resume` (or let the agent call it).");
 
-  // Auto-generate a CLAUDE.md for immediate agent awareness (non-destructive if exists).
-  // Only if there's already a head baton (otherwise render will no-op with warning).
-  try {
-    runRender(store.root, "claude-md", undefined, true);
-    ok("wrote CLAUDE.md with current baton context (re-runnable via `baton render claude-md --write`)");
-  } catch {
-    warn("skipped auto-rendering CLAUDE.md (run `baton render claude-md --write` manually if desired)");
-  }
+  // Ensure a CLAUDE.md exists with helpful starter content + managed block for Baton.
+  ensureStarterClaudeMd(store.root);
 
   console.log(
-    "\nnext: just work — checkpoints accrue. Use `baton status`, `baton pass`, or tell your agent to use baton_* MCP tools.",
+    "\nNext steps: work in your agent (checkpoints happen automatically).\n" +
+      "  • `baton status`          inspect current state\n" +
+      "  • `baton pass`            seal & hand off when ready\n" +
+      "  • `baton resume`          get fresh context for a new session\n" +
+      "  • Tell your agent: \"use the baton tools to checkpoint or pass when done\"",
   );
+}
+
+const BEGIN_MARKER = "<!-- baton:begin -->";
+const END_MARKER = "<!-- baton:end -->";
+
+function ensureStarterClaudeMd(root: string): void {
+  const path = join(root, "CLAUDE.md");
+  const starterBody = [
+    "## Project rules (managed by BATON)",
+    "",
+    "Edits inside this block are overwritten on the next `baton render`.",
+    "",
+    "- Run `baton resume` (or let your agent call it) at the start of new sessions.",
+    "- Use `baton status` and `baton pass` (via CLI or MCP) to manage handoffs.",
+    "- The \"graveyard\" section in batons lists approaches that failed — avoid repeating them.",
+  ].join("\n");
+
+  let existing = "";
+  if (existsSync(path)) {
+    existing = readFileSync(path, "utf8");
+  }
+
+  const block = `${BEGIN_MARKER}\n${starterBody}\n${END_MARKER}`;
+
+  let newContent: string;
+  const begin = existing.indexOf(BEGIN_MARKER);
+  const end = existing.indexOf(END_MARKER);
+
+  if (begin !== -1 && end !== -1 && end > begin) {
+    // Preserve user content outside the markers
+    newContent = existing.slice(0, begin) + block + existing.slice(end + END_MARKER.length);
+  } else if (existing.trim() === "") {
+    newContent = block + "\n";
+  } else {
+    const sep = existing.endsWith("\n\n") ? "" : existing.endsWith("\n") ? "\n" : "\n\n";
+    newContent = existing + sep + block + "\n";
+  }
+
+  if (newContent !== existing) {
+    writeFileSync(path, newContent);
+    ok("created/updated CLAUDE.md with starter content (Baton manages the marked block)");
+  }
 }

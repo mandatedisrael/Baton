@@ -6,6 +6,14 @@ import { resolveHandoffId } from "../resolve.ts";
 /** Build the verified attachment evidence for a distilled claim. */
 export function verificationEvidence(cwd: string, claimId: string, idPrefix?: string): string {
   const store = ProjectStore.open(cwd);
+  return verificationEvidenceFromStore(store, claimId, idPrefix);
+}
+
+export function verificationEvidenceFromStore(
+  store: ProjectStore,
+  claimId: string,
+  idPrefix?: string,
+): string {
   const handoff = store.loadHandoff(resolveHandoffId(store, idPrefix));
   const claim = findCitedClaim(handoff, claimId);
   const attachment = handoff.attachments.find((item) => item.id === claim.citation.attachmentId);

@@ -62,6 +62,7 @@ Commands:
   render <fmt> project a handoff into a rules file (${Object.keys(RULES_TARGETS).join(" | ")})
   install      register the Claude Code checkpoint hook for this project
   uninstall    remove the Claude Code checkpoint hook
+  mcp setup    print ready-to-paste MCP config for Codex / Cursor / generic clients
   doctor       diagnose the installation and verify local batons
 
 Options:
@@ -286,11 +287,66 @@ function main(argv: string[]): void {
     }
     case "doctor":
       return runDoctor(process.cwd());
+    case "mcp": {
+      const sub = rest[0];
+      if (sub === "setup" || sub === "config") {
+        const tool = rest[1] || "all";
+        printMcpSetup(tool);
+        return;
+      }
+      process.stderr.write("usage: baton mcp setup [codex | cursor | generic | all]\n");
+      process.exitCode = 2;
+      return;
+    }
     default:
       process.stderr.write(`baton: unknown command "${command}"\n\n${USAGE}`);
       process.exitCode = 2;
       return;
   }
+}
+
+function printMcpSetup(tool: string) {
+  const project = process.cwd();
+  const cmd = "baton-mcp";
+  const args = `--project ${project}`;
+  console.log("Add this to your MCP client config (absolute path recommended):\n");
+
+  if (tool === "codex" || tool === "all") {
+    console.log("Codex (.codex/config.toml or via `codex mcp add`):");
+    console.log(`[mcp_servers.baton]
+command = "${cmd}"
+args = ["${args}"]
+required = true
+startup_timeout_sec = 20
+tool_timeout_sec = 120
+`);
+  }
+
+  if (tool === "cursor" || tool === "all") {
+    console.log("Cursor (settings or .cursor/mcp.json):");
+    console.log(JSON.stringify({
+      mcpServers: {
+        baton: {
+          command: cmd,
+          args: ["--project", project],
+        },
+      },
+    }, null, 2) + "\n");
+  }
+
+  if (tool === "generic" || tool === "all") {
+    console.log("Generic (Claude desktop, other MCP clients):");
+    console.log(JSON.stringify({
+      mcpServers: {
+        baton: {
+          command: cmd,
+          args: ["--project", project],
+        },
+      },
+    }, null, 2) + "\n");
+  }
+
+  console.log("Then run `baton resume` at the start of sessions, or let the agent call baton_resume.");
 }
 
 try {

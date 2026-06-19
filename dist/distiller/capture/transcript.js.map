@@ -1,0 +1,1 @@
+{"version":3,"file":"transcript.js","sourceRoot":"","sources":["../../../src/distiller/capture/transcript.ts"],"names":[],"mappings":"AA+DA,qFAAqF;AACrF,MAAM,UAAU,oBAAoB,CAAC,OAAwB,EAAE,EAAU;IACvE,OAAO;QACL,EAAE;QACF,IAAI,EAAE,YAAY;QAClB,WAAW,EAAE,OAAO,CAAC,GAAG,CAAC,IAAI;QAC7B,KAAK,EAAE,OAAO,CAAC,GAAG,CAAC,KAAK;QACxB,OAAO,EAAE,IAAI,EAAE,sCAAsC;KACtD,CAAC;AACJ,CAAC"}

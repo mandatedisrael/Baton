@@ -29,7 +29,6 @@
     "baton": "node src/cli/index.ts",
     "mcp": "node src/mcp/index.ts",
     "build": "tsc -p tsconfig.build.json",
-    "prepare": "npm run build",
     "prepack": "npm run build",
     "test": "node --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"

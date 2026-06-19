@@ -113,3 +113,27 @@ test("recoverRemoteHandoff persists nothing when an attachment fails verificatio
   assert.throws(() => f.store.loadHandoff(f.id), /no handoff/);
   assert.throws(() => f.store.loadAttachment(f.attachment), /not available locally/);
 });
+
+test("remote audit refuses ciphertext decryption failure without local writes", async () => {
+  const f = fixture();
+  f.decryptor.decrypt = async () => { throw new Error("authenticated ciphertext is corrupt"); };
+  await assert.rejects(recoverRemoteHandoff(f), /authenticated ciphertext is corrupt/);
+  assert.throws(() => f.store.loadHandoff(f.id), /no handoff/);
+  assert.throws(() => f.store.loadAttachment(f.attachment), /not available locally/);
+});
+
+test("revocation between handoff and attachment decryption leaves no partial recovery", async () => {
+  const f = fixture();
+  let calls = 0;
+  f.decryptor.decrypt = async (request) => {
+    calls += 1;
+    if (calls === 2) throw new Error("Seal access revoked during audit");
+    const blobId = request.data.toString().slice("cipher:".length);
+    return blobId === f.manifest.handoff.blobId
+      ? Buffer.from(canonicalize(f.handoff))
+      : f.attachmentBytes;
+  };
+  await assert.rejects(recoverRemoteHandoff(f), /access revoked during audit/);
+  assert.throws(() => f.store.loadHandoff(f.id), /no handoff/);
+  assert.throws(() => f.store.loadAttachment(f.attachment), /not available locally/);
+});

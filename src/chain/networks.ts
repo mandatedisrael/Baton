@@ -22,5 +22,6 @@ export const TESTNET_WALRUS: RemoteProjectConfig["walrus"] = {
   epochs: 3,
   deletable: false,
   uploadRelayUrl: "https://upload-relay.testnet.walrus.space",
+  aggregatorUrl: "https://aggregator.walrus-testnet.walrus.space",
   maxTipMist: 1_000,
 };

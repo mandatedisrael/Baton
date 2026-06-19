@@ -30,6 +30,7 @@ function config() {
         epochs: 3,
         deletable: false,
         uploadRelayUrl: "https://upload-relay.testnet.walrus.space",
+        aggregatorUrl: "https://aggregator.walrus-testnet.walrus.space",
         maxTipMist: 1000,
       },
     },
@@ -76,6 +77,7 @@ test("parseProjectConfig migrates pre-Walrus remote config safely", () => {
   delete (value.remote as Partial<typeof value.remote>).walrus;
   const parsed = parseProjectConfig(value);
   assert.equal(parsed.remote?.walrus.uploadRelayUrl, "https://upload-relay.testnet.walrus.space");
+  assert.equal(parsed.remote?.walrus.aggregatorUrl, "https://aggregator.walrus-testnet.walrus.space");
   assert.equal(parsed.remote?.walrus.deletable, false);
 });
 
@@ -87,4 +89,8 @@ test("parseProjectConfig bounds Walrus storage and relay policy", () => {
   const excessive = config();
   excessive.remote.walrus.epochs = 54;
   assert.throws(() => parseProjectConfig(excessive), /expected <= 53/);
+
+  const insecureAggregator = config();
+  insecureAggregator.remote.walrus.aggregatorUrl = "http://aggregator.example";
+  assert.throws(() => parseProjectConfig(insecureAggregator), /expected an https URL/);
 });

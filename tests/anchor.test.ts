@@ -18,7 +18,13 @@ const remote: RemoteProjectConfig = {
   registrationTx: "registration",
   registeredAt: "2026-06-19T12:00:00.000Z",
   seal: { threshold: 1, serverConfigs: [{ objectId: "0x1", weight: 1 }] },
-  walrus: { epochs: 3, deletable: false, uploadRelayUrl: "https://relay.example", maxTipMist: 1000 },
+  walrus: {
+    epochs: 3,
+    deletable: false,
+    uploadRelayUrl: "https://relay.example",
+    aggregatorUrl: "https://aggregator.example",
+    maxTipMist: 1000,
+  },
 };
 
 function uploadedFixture() {

@@ -25,6 +25,7 @@ export interface RemoteProjectConfig {
     epochs: number;
     deletable: boolean;
     uploadRelayUrl: string;
+    aggregatorUrl: string;
     maxTipMist: number;
   };
 }
@@ -94,14 +95,22 @@ function parseRemote(v: unknown, path: string): RemoteProjectConfig {
     epochs: 3,
     deletable: false,
     uploadRelayUrl: "https://upload-relay.testnet.walrus.space",
+    aggregatorUrl: "https://aggregator.walrus-testnet.walrus.space",
     maxTipMist: 1_000,
-  }, `${path}.walrus`, ["epochs", "deletable", "uploadRelayUrl", "maxTipMist"]);
+  }, `${path}.walrus`, ["epochs", "deletable", "uploadRelayUrl", "aggregatorUrl", "maxTipMist"]);
   if (typeof walrusRaw.deletable !== "boolean") {
     throw new ValidationError(`${path}.walrus.deletable`, "expected boolean");
   }
   const uploadRelayUrl = httpUrl(walrusRaw.uploadRelayUrl, `${path}.walrus.uploadRelayUrl`);
   if (new URL(uploadRelayUrl).protocol !== "https:") {
     throw new ValidationError(`${path}.walrus.uploadRelayUrl`, "expected an https URL");
+  }
+  const aggregatorUrl = httpUrl(
+    walrusRaw.aggregatorUrl ?? "https://aggregator.walrus-testnet.walrus.space",
+    `${path}.walrus.aggregatorUrl`,
+  );
+  if (new URL(aggregatorUrl).protocol !== "https:") {
+    throw new ValidationError(`${path}.walrus.aggregatorUrl`, "expected an https URL");
   }
   return {
     network: oneOf(r.network, `${path}.network`, SUI_NETWORKS),
@@ -116,6 +125,7 @@ function parseRemote(v: unknown, path: string): RemoteProjectConfig {
       epochs: num(walrusRaw.epochs, `${path}.walrus.epochs`, { int: true, min: 1, max: 53 }),
       deletable: walrusRaw.deletable,
       uploadRelayUrl,
+      aggregatorUrl,
       maxTipMist: num(walrusRaw.maxTipMist, `${path}.walrus.maxTipMist`, { int: true, min: 0 }),
     },
   };

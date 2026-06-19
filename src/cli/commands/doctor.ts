@@ -2,7 +2,7 @@ import { ProjectStore } from "../../store/project.ts";
 import { findProjectRoot } from "../../store/paths.ts";
 import { hooksInstalled } from "../hooks.ts";
 import { fail, ok, warn } from "../output.ts";
-import { loadIdentity } from "../../chain/identity.ts";
+import { loadIdentity, isZkLoginIdentity } from "../../chain/identity.ts";
 
 /**
  * `baton doctor` — diagnose the local installation and project.
@@ -54,7 +54,9 @@ export function runDoctor(cwd: string): void {
     return `${jobs.length} job(s), ${open} open`;
   });
   if (store.config().remote) {
-    check("Sui identity", () => loadIdentity().record.address);
+    const id = loadIdentity();
+    const scheme = isZkLoginIdentity(id) ? "zkLogin (google)" : "Ed25519";
+    check("Sui identity", () => `${id.record.address} (${scheme})`);
     check("remote project", () => {
       const remote = store.config().remote!;
       return `${remote.network} · ${remote.projectObjectId}`;

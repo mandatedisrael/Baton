@@ -146,3 +146,11 @@ On 2026-06-19, the hardened daemon started against the funded Testnet sponsor an
 Five invalid registration requests were sent through the trusted-proxy path for one documentation-only client IP: four reached validation and the fifth received `429`. A different client IP remained independent and reached validation. The resulting counters recorded five rejected validation requests and one rate-limited request. Health and metrics probes did not consume the registration request allowance.
 
 This proves the chain-aware readiness, proxy-client isolation, metrics, and configured liability controls on the real Testnet sponsor process. TLS termination, public DNS, Internet traffic, external monitoring, host hardening, and abuse response remain deployment work and are not claimed here.
+
+## Live interrupted-registration reconciliation evidence
+
+On 2026-06-19, the durable record for successful sponsored transaction `HcmxyxYj9xEPxim7UWDesTWG1kB7hAP6eTxVMq2v39Z8` was copied into the exact state produced when Sui execution succeeds but the local process stops before recording its result: the reservation remained submitted with its original transaction bytes, while `usedAt` and `result` were absent. No bearer token or user signature was supplied during recovery.
+
+`baton-sponsor reconcile` derived the deterministic digest from the persisted transaction bytes, retrieved the existing transaction and object changes from Sui Testnet, verified the expected `ProjectMemory` and `OwnerCap` types, and restored the durable used result. The same submitted state was then recreated and the daemon was restarted. Startup reconciliation completed it before the HTTP listener became ready; `/ready` subsequently returned `200` and operator inspection showed the original digest.
+
+This proves both manual and automatic restart recovery from the post-execution/pre-commit crash window without resubmitting or spending gas twice. Submitted records are retained after local expiry and cannot be revoked or pruned until their Sui outcome is reconciled. Arbitrary process termination at every instruction boundary and long-duration Testnet outages remain broader chaos-testing work.

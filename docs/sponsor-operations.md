@@ -113,17 +113,18 @@ Scrape metrics over loopback. Alert on readiness failures, sustained rejection/t
 baton-sponsor list --state /var/lib/baton-sponsor/state.json
 baton-sponsor list --state /var/lib/baton-sponsor/state.json --json
 baton-sponsor revoke --state /var/lib/baton-sponsor/state.json --id INVITATION_ID
+baton-sponsor reconcile --state /var/lib/baton-sponsor/state.json
 baton-sponsor prune --state /var/lib/baton-sponsor/state.json
 ```
 
-Revocation is allowed only before a successful registration. Pruning removes expired and revoked records but retains completed results for idempotency and auditability. Daemon and CLI mutations use the same cross-process lock and may safely run concurrently.
+Revocation is allowed only before submission. Baton records the deterministic Sui transaction digest and submitted timestamp before sponsor execution; a submitted record cannot be revoked or pruned while its chain outcome is uncertain. `reconcile` looks up those digests on Sui and completes visible transactions without needing the bearer token or another signature. The daemon runs the same reconciliation before accepting traffic. Pruning removes expired and revoked records but retains submitted records and completed results for recovery, idempotency, and auditability. Daemon and CLI mutations use the same cross-process lock and may safely run concurrently.
 
 ## Incident response
 
 - **Identity suspected exposed:** stop the daemon, remove public routing, rotate to a newly funded sponsor identity, and preserve the old state file for audit. Invitation constraints prevent arbitrary transaction signing but do not make a leaked gas key safe.
 - **Token suspected exposed:** revoke its invitation ID immediately. A pre-bound token cannot be redirected to another user or project.
-- **Readiness failing:** check Testnet RPC health, sponsor coin balance/object availability, state permissions, and active reservations. Do not route traffic based on `/health` alone.
+- **Readiness failing:** check Testnet RPC health, sponsor coin balance/object availability, state permissions, and active reservations. Run `baton-sponsor reconcile` for submitted records and do not route traffic based on `/health` alone.
 - **State corruption:** stop the daemon and restore the encrypted backup. Do not delete completed records merely to clear an error; they carry retry results.
-- **Unexpected spend:** stop routing and the daemon first, then reconcile completed transaction digests from `baton-sponsor list --json` against Sui before re-enabling service.
+- **Unexpected spend:** stop routing and the daemon first, run `baton-sponsor reconcile`, then compare completed transaction digests from `baton-sponsor list --json` against Sui before re-enabling service.
 
 Mainnet operation, Internet-facing deployment, managed monitoring, and production abuse economics have not yet been proven by the Baton project.

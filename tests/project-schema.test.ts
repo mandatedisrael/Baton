@@ -12,6 +12,7 @@ function config() {
       network: "testnet",
       rpcUrl: "https://fullnode.testnet.sui.io:443",
       packageId: "0x1234",
+      policyPackageId: "0x1234",
       projectObjectId: "0x5678",
       authority: { kind: "owner", capId: "0x9abc" },
       registrationTx: "transaction-digest",
@@ -55,6 +56,13 @@ test("parseProjectConfig migrates owner-only authority metadata", () => {
   delete (value.remote as Partial<typeof value.remote>).authority;
   (value.remote as typeof value.remote & { ownerCapId: string }).ownerCapId = capId;
   assert.deepEqual(parseProjectConfig(value).remote?.authority, { kind: "owner", capId });
+});
+
+test("parseProjectConfig migrates pre-upgrade policy package metadata", () => {
+  const value = config();
+  delete (value.remote as Partial<typeof value.remote>).policyPackageId;
+  const parsed = parseProjectConfig(value);
+  assert.equal(parsed.remote?.policyPackageId, parsed.remote?.packageId);
 });
 
 test("parseProjectConfig accepts delegated authority metadata", () => {

@@ -55,6 +55,7 @@ function fixture() {
     network: "testnet",
     rpcUrl: "https://rpc.example",
     packageId: "0x1234",
+    policyPackageId: "0x1234",
     projectObjectId: "0x5678",
     authority: { kind: "owner", capId: "0x9abc" },
     registrationTx: "register",

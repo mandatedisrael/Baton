@@ -10,6 +10,7 @@ const remote = {
   network: "testnet",
   rpcUrl: "https://rpc.example",
   packageId: PACKAGE,
+  policyPackageId: PACKAGE,
   projectObjectId: PROJECT,
   authority: { kind: "owner", capId: "0x1" },
   registrationTx: "register",

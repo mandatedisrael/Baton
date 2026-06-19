@@ -2,6 +2,7 @@ import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { loadIdentity } from "../../chain/identity.ts";
 import {
   BATON_CORE_TESTNET_PACKAGE,
+  BATON_CORE_TESTNET_ORIGINAL_PACKAGE,
   TESTNET_RPC_URL,
   TESTNET_SEAL,
   TESTNET_WALRUS,
@@ -51,7 +52,8 @@ export async function runRegister(cwd: string, options: RegisterOptions = {}): P
   store.setRemoteConfig({
     network: "testnet",
     rpcUrl,
-    packageId,
+    packageId: packageId === BATON_CORE_TESTNET_PACKAGE ? BATON_CORE_TESTNET_ORIGINAL_PACKAGE : packageId,
+    policyPackageId: packageId,
     projectObjectId: result.projectObjectId,
     authority: { kind: "owner", capId: result.ownerCapId },
     registrationTx: result.digest,

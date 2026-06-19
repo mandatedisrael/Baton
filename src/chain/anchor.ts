@@ -71,7 +71,7 @@ export function buildAnchorTransaction(input: {
 
   const tx = new Transaction();
   tx.moveCall({
-    target: `${normalizeSuiObjectId(input.remote.packageId)}::memory::anchor_handoff`,
+    target: `${normalizeSuiObjectId(input.remote.policyPackageId)}::memory::anchor_handoff`,
     arguments: [
       tx.object(input.remote.projectObjectId),
       tx.object(input.remote.authority.capId),

@@ -22,7 +22,7 @@ export function buildGrantAccessTransaction(remote: RemoteProjectConfig, grantee
   const address = normalizeSuiAddress(grantee);
   const tx = new Transaction();
   tx.moveCall({
-    target: `${normalizeSuiObjectId(remote.packageId)}::memory::grant_access`,
+    target: `${normalizeSuiObjectId(remote.policyPackageId)}::memory::grant_access`,
     arguments: [
       tx.object(remote.projectObjectId),
       tx.object(ownerCap(remote)),
@@ -36,7 +36,7 @@ export function buildRevokeAccessTransaction(remote: RemoteProjectConfig, grante
   const address = normalizeSuiAddress(grantee);
   const tx = new Transaction();
   tx.moveCall({
-    target: `${normalizeSuiObjectId(remote.packageId)}::memory::revoke_access`,
+    target: `${normalizeSuiObjectId(remote.policyPackageId)}::memory::revoke_access`,
     arguments: [
       tx.object(remote.projectObjectId),
       tx.object(ownerCap(remote)),
@@ -114,7 +114,7 @@ export async function grantAccessOnSui(input: {
   }
   return {
     digest: response.digest,
-    accessCapId: extractGrantedAccessCap(input.remote.packageId, grantee, response.objectChanges),
+    accessCapId: extractGrantedAccessCap(input.remote.policyPackageId, grantee, response.objectChanges),
     grantee,
   };
 }
@@ -153,7 +153,7 @@ export async function verifyDelegatedAccess(input: {
     throw new BatonError("INVALID_STATE", "invitation does not contain delegated authority");
   }
   const grantee = normalizeSuiAddress(input.grantee);
-  const packageId = normalizeSuiObjectId(input.remote.packageId);
+  const packageId = normalizeSuiObjectId(input.remote.policyPackageId);
   const cap = await input.client.getObject({
     id: input.remote.authority.capId,
     options: { showContent: true, showOwner: true, showType: true },

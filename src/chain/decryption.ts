@@ -13,6 +13,7 @@ export interface RemoteBlobDescriptor {
 
 export interface DecryptionRequest {
   packageId: string;
+  policyPackageId: string;
   projectObjectId: string;
   authority: RemoteAuthority;
   handoffId: string;
@@ -27,6 +28,7 @@ export interface PayloadDecryptor {
 export async function decryptBlob(input: {
   decryptor: PayloadDecryptor;
   packageId: string;
+  policyPackageId: string;
   projectObjectId: string;
   authority: RemoteAuthority;
   handoffId: string;
@@ -35,6 +37,7 @@ export async function decryptBlob(input: {
 }): Promise<Uint8Array> {
   const plaintext = await input.decryptor.decrypt({
     packageId: input.packageId,
+    policyPackageId: input.policyPackageId,
     projectObjectId: input.projectObjectId,
     authority: input.authority,
     handoffId: input.handoffId,

@@ -21,6 +21,8 @@ export interface RemoteProjectConfig {
   network: SuiNetwork;
   rpcUrl: string;
   packageId: string;
+  /** Latest package version used for Move calls; packageId remains Seal's stable original identity. */
+  policyPackageId: string;
   projectObjectId: string;
   authority: RemoteAuthority;
   registrationTx: string;
@@ -82,6 +84,7 @@ function parseRemote(v: unknown, path: string): RemoteProjectConfig {
     "network",
     "rpcUrl",
     "packageId",
+    "policyPackageId",
     "projectObjectId",
     "authority",
     // Legacy owner-only configs migrate to `authority` on read.
@@ -138,6 +141,7 @@ function parseRemote(v: unknown, path: string): RemoteProjectConfig {
     network: oneOf(r.network, `${path}.network`, SUI_NETWORKS),
     rpcUrl: httpUrl(r.rpcUrl, `${path}.rpcUrl`),
     packageId: suiId(r.packageId, `${path}.packageId`),
+    policyPackageId: suiId(r.policyPackageId ?? r.packageId, `${path}.policyPackageId`),
     projectObjectId: suiId(r.projectObjectId, `${path}.projectObjectId`),
     authority,
     registrationTx: str(r.registrationTx, `${path}.registrationTx`, { min: 1 }),

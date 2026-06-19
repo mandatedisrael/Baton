@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { decryptBlob, type PayloadDecryptor, type RemoteBlobDescriptor } from "../src/chain/decryption.ts";
 import { buildSealApprovalTransaction } from "../src/chain/seal.ts";
 import { hashBytes } from "../src/core/hash.ts";
+import { normalizeSuiObjectId } from "@mysten/sui/utils";
 
 const plaintext = Buffer.from("verified remote baton");
 const HANDOFF_ID = "f".repeat(64);
@@ -25,6 +26,7 @@ test("decryptBlob binds policy identity and verifies recovered plaintext", async
     await decryptBlob({
       decryptor,
       packageId: "0x1234",
+      policyPackageId: "0x1234",
       projectObjectId: "0x5678",
       authority: { kind: "owner", capId: "0x9abc" },
       handoffId: HANDOFF_ID,
@@ -42,6 +44,7 @@ test("decryptBlob refuses plaintext that differs from the manifest hash", async 
     decryptBlob({
       decryptor,
       packageId: "0x1234",
+      policyPackageId: "0x1234",
       projectObjectId: "0x5678",
       authority: { kind: "owner", capId: "0x9abc" },
       handoffId: HANDOFF_ID,
@@ -55,6 +58,7 @@ test("decryptBlob refuses plaintext that differs from the manifest hash", async 
 test("buildSealApprovalTransaction selects the owner-gated Baton policy", () => {
   const tx = buildSealApprovalTransaction({
     packageId: "0x1234",
+    policyPackageId: "0x1234",
     projectObjectId: "0x5678",
     authority: { kind: "owner", capId: "0x9abc" },
     identity: `0x${"00".repeat(64)}`,
@@ -70,11 +74,15 @@ test("buildSealApprovalTransaction selects the owner-gated Baton policy", () => 
 test("buildSealApprovalTransaction selects the delegated Baton policy", () => {
   const tx = buildSealApprovalTransaction({
     packageId: "0x1234",
+    policyPackageId: "0x5678",
     projectObjectId: "0x5678",
     authority: { kind: "delegate", capId: "0xdef0" },
     identity: `0x${"00".repeat(64)}`,
   });
   const call = tx.getData().commands[0];
   assert.equal(call?.$kind, "MoveCall");
-  if (call?.$kind === "MoveCall") assert.equal(call.MoveCall.function, "seal_approve_shared");
+  if (call?.$kind === "MoveCall") {
+    assert.equal(call.MoveCall.function, "seal_approve_shared");
+    assert.equal(call.MoveCall.package, normalizeSuiObjectId("0x5678"));
+  }
 });

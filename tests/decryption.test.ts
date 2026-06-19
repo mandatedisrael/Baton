@@ -5,6 +5,7 @@ import { buildSealApprovalTransaction } from "../src/chain/seal.ts";
 import { hashBytes } from "../src/core/hash.ts";
 
 const plaintext = Buffer.from("verified remote baton");
+const HANDOFF_ID = "f".repeat(64);
 const blob: RemoteBlobDescriptor = {
   id: "handoff",
   kind: "handoff",
@@ -26,12 +27,13 @@ test("decryptBlob binds policy identity and verifies recovered plaintext", async
       packageId: "0x1234",
       projectObjectId: "0x5678",
       ownerCapId: "0x9abc",
+      handoffId: HANDOFF_ID,
       blob,
       ciphertext: Uint8Array.from([1, 2, 3]),
     }),
     plaintext,
   );
-  assert.equal(identity, `0x${"5678".padStart(64, "0")}${blob.contentHash}`);
+  assert.equal(identity, `0x${"5678".padStart(64, "0")}${HANDOFF_ID}`);
 });
 
 test("decryptBlob refuses plaintext that differs from the manifest hash", async () => {
@@ -42,6 +44,7 @@ test("decryptBlob refuses plaintext that differs from the manifest hash", async 
       packageId: "0x1234",
       projectObjectId: "0x5678",
       ownerCapId: "0x9abc",
+      handoffId: HANDOFF_ID,
       blob,
       ciphertext: Uint8Array.from([1]),
     }),

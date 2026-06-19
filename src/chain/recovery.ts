@@ -78,6 +78,7 @@ async function recoverBlob(input: {
     packageId: input.remote.packageId,
     projectObjectId: input.remote.projectObjectId,
     ownerCapId: input.remote.ownerCapId,
+    handoffId: input.manifest.handoffId,
     blob: input.descriptor,
     ciphertext,
   });

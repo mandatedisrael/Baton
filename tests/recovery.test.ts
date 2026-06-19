@@ -93,8 +93,11 @@ test("recoverRemoteHandoff refuses manifest metadata substitution", async () => 
 
 test("recoverRemoteHandoff persists nothing when an attachment fails verification", async () => {
   const f = fixture();
-  f.decryptor.decrypt = async (request) =>
-    request.identity.endsWith(f.attachment.contentHash) ? Buffer.from("tampered") : Buffer.from(canonicalize(f.handoff));
+  let calls = 0;
+  f.decryptor.decrypt = async () => {
+    calls += 1;
+    return calls === 2 ? Buffer.from("tampered") : Buffer.from(canonicalize(f.handoff));
+  };
   await assert.rejects(recoverRemoteHandoff(f), /hashes to/);
   assert.throws(() => f.store.loadHandoff(f.id), /no handoff/);
   assert.throws(() => f.store.loadAttachment(f.attachment), /not available locally/);

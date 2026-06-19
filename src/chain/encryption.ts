@@ -34,13 +34,13 @@ export function validateEncryptionPolicy(policy: EncryptionPolicy): EncryptionPo
   return policy;
 }
 
-/** Seal identities bind the ciphertext to both its project and content hash. */
-export function sealIdentity(
-  projectObjectId: string,
-  blob: Pick<UploadBlob, "contentHash">,
-): string {
+/** Seal identities bind every payload to its project and anchored baton. */
+export function sealIdentity(projectObjectId: string, handoffId: string): string {
   const project = projectObjectId.slice(2).toLowerCase().padStart(64, "0");
-  return `0x${project}${blob.contentHash}`;
+  if (!/^[a-f0-9]{64}$/.test(handoffId)) {
+    throw new BatonError("INVALID_HANDOFF", "Seal baton identity must be 64 lowercase hex characters");
+  }
+  return `0x${project}${handoffId}`;
 }
 
 /** Additional authenticated data prevents a valid ciphertext being swapped between queue slots. */
@@ -115,7 +115,7 @@ export async function encryptBlob(
   }
   return encryptor.encrypt({
     packageId: policy.packageId,
-    identity: sealIdentity(policy.projectObjectId, blob),
+    identity: sealIdentity(policy.projectObjectId, handoffId),
     threshold: policy.threshold,
     data: plaintext,
     aad: sealAad(policy.projectObjectId, handoffId, blob),

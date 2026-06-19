@@ -14,6 +14,7 @@ export interface DecryptionRequest {
   packageId: string;
   projectObjectId: string;
   ownerCapId: string;
+  handoffId: string;
   identity: string;
   data: Uint8Array;
 }
@@ -27,6 +28,7 @@ export async function decryptBlob(input: {
   packageId: string;
   projectObjectId: string;
   ownerCapId: string;
+  handoffId: string;
   blob: RemoteBlobDescriptor;
   ciphertext: Uint8Array;
 }): Promise<Uint8Array> {
@@ -34,7 +36,8 @@ export async function decryptBlob(input: {
     packageId: input.packageId,
     projectObjectId: input.projectObjectId,
     ownerCapId: input.ownerCapId,
-    identity: sealIdentity(input.projectObjectId, input.blob),
+    handoffId: input.handoffId,
+    identity: sealIdentity(input.projectObjectId, input.handoffId),
     data: input.ciphertext,
   });
   const actual = hashBytes(plaintext);

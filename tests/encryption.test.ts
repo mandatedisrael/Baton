@@ -52,9 +52,9 @@ function job(): UploadJob {
   };
 }
 
-test("Seal identity and AAD bind ciphertext to its queue slot", () => {
+test("Seal identity binds the anchored baton while AAD binds each queue slot", () => {
   const target = blob();
-  assert.equal(sealIdentity("0x1234", target), `0x${"1234".padStart(64, "0")}${target.contentHash}`);
+  assert.equal(sealIdentity("0x1234", HANDOFF_ID), `0x${"1234".padStart(64, "0")}${HANDOFF_ID}`);
   assert.equal(
     new TextDecoder().decode(sealAad("0x1234", HANDOFF_ID, target)),
     `baton:v1:0x1234:${HANDOFF_ID}:attachment:transcript-1:${target.contentHash}`,
@@ -84,7 +84,7 @@ test("encryptBlob verifies plaintext before crossing the provider boundary", asy
     PLAINTEXT,
   );
   assert.deepEqual(encrypted, new Uint8Array([9, 8, 7]));
-  assert.equal(request?.identity, `0x${"5678".padStart(64, "0")}${hashBytes(PLAINTEXT)}`);
+  assert.equal(request?.identity, `0x${"5678".padStart(64, "0")}${HANDOFF_ID}`);
   assert.equal(request?.threshold, 2);
   await assert.rejects(
     () =>

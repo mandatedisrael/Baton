@@ -6,6 +6,8 @@ import { BatonError } from "../../core/errors.ts";
 import { loadIdentity } from "../../chain/identity.ts";
 import { createWalrusUploader } from "../../chain/walrus.ts";
 import { uploadQueuedJob } from "../../chain/upload.ts";
+import { anchorQueuedJob } from "../../chain/anchor.ts";
+import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { ok, warn } from "../output.ts";
 
 export function runQueueStatus(cwd: string): void {
@@ -86,4 +88,42 @@ export async function runQueueUpload(cwd: string, identityPath?: string): Promis
     }
   }
   if (failed > 0) throw new BatonError("IO_ERROR", `${failed} publication job(s) could not be uploaded`);
+}
+
+export async function runQueueAnchor(cwd: string, identityPath?: string): Promise<void> {
+  const store = ProjectStore.open(cwd);
+  const remote = store.config().remote;
+  if (!remote) {
+    throw new BatonError("INVALID_STATE", "project is local-only — run `baton login` then `baton register`");
+  }
+  const { keypair } = loadIdentity(identityPath);
+  const client = new SuiJsonRpcClient({ network: remote.network, url: remote.rpcUrl });
+  const jobs = store.listUploadJobs();
+  const notUploaded = jobs.filter((job) => job.blobs.some((blob) => blob.status !== "uploaded"));
+  if (notUploaded.length > 0) {
+    throw new BatonError("INVALID_STATE", `${notUploaded.length} queued baton(s) still need encryption or upload`);
+  }
+  const pending = jobs.filter((job) => job.anchor.status === "pending");
+  if (pending.length === 0) {
+    ok("all uploaded batons are already anchored on Sui");
+    return;
+  }
+
+  let failed = 0;
+  for (const queued of pending) {
+    const result = await anchorQueuedJob({
+      store,
+      handoffId: queued.handoffId,
+      client,
+      keypair,
+      remote,
+    });
+    if (result.job.status === "failed" || !result.sidecar) {
+      failed += 1;
+      warn(`${queued.handoffId.slice(0, 12)} anchoring failed: ${result.job.lastError}`);
+    } else {
+      ok(`${queued.handoffId.slice(0, 12)} anchored and verified: ${result.sidecar.anchor.txDigest}`);
+    }
+  }
+  if (failed > 0) throw new BatonError("IO_ERROR", `${failed} publication job(s) could not be anchored`);
 }

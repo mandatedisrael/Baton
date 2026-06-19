@@ -17,7 +17,7 @@ import { runCheckpoint } from "./commands/checkpoint.ts";
 import { runInstall, runUninstall } from "./commands/install.ts";
 import { runDoctor } from "./commands/doctor.ts";
 import { runVerify } from "./commands/verify.ts";
-import { runQueueEncrypt, runQueueStatus, runQueueUpload } from "./commands/queue.ts";
+import { runQueueAnchor, runQueueEncrypt, runQueueStatus, runQueueUpload } from "./commands/queue.ts";
 import { runLogin } from "./commands/login.ts";
 import { runRegister } from "./commands/register.ts";
 import { runFaucet } from "./commands/faucet.ts";
@@ -43,6 +43,7 @@ Commands:
   queue status show crash-safe remote publication progress
   queue encrypt encrypt pending payloads through Seal
   queue upload  upload encrypted payloads and certify them on Walrus
+  queue anchor  anchor uploaded handoff manifests on Sui
   render <fmt> project a handoff into a rules file (${Object.keys(RULES_TARGETS).join(" | ")})
   install      register the Claude Code checkpoint hook for this project
   uninstall    remove the Claude Code checkpoint hook
@@ -148,8 +149,8 @@ function main(argv: string[]): void {
       return runVerify(process.cwd(), claimId, rest[1]);
     }
     case "queue":
-      if (rest.length > 1 || ![undefined, "status", "encrypt", "upload"].includes(rest[0])) {
-        process.stderr.write("usage: baton queue [status|encrypt|upload]\n");
+      if (rest.length > 1 || ![undefined, "status", "encrypt", "upload", "anchor"].includes(rest[0])) {
+        process.stderr.write("usage: baton queue [status|encrypt|upload|anchor]\n");
         process.exitCode = 2;
         return;
       }
@@ -159,6 +160,10 @@ function main(argv: string[]): void {
       }
       if (rest[0] === "upload") {
         void runQueueUpload(process.cwd()).catch(die);
+        return;
+      }
+      if (rest[0] === "anchor") {
+        void runQueueAnchor(process.cwd()).catch(die);
         return;
       }
       return runQueueStatus(process.cwd());

@@ -308,14 +308,14 @@ function main(argv: string[]): void {
 function printMcpSetup(tool: string) {
   const project = process.cwd();
   const cmd = "baton-mcp";
-  const args = `--project ${project}`;
-  console.log("Add this to your MCP client config (absolute path recommended):\n");
+
+  console.log("Copy the relevant section into your MCP client config:\n");
 
   if (tool === "codex" || tool === "all") {
-    console.log("Codex (.codex/config.toml or via `codex mcp add`):");
+    console.log("Codex (add via `codex mcp add baton --` or edit .codex/config.toml):");
     console.log(`[mcp_servers.baton]
 command = "${cmd}"
-args = ["${args}"]
+args = ["--project", "${project}"]
 required = true
 startup_timeout_sec = 20
 tool_timeout_sec = 120
@@ -323,7 +323,7 @@ tool_timeout_sec = 120
   }
 
   if (tool === "cursor" || tool === "all") {
-    console.log("Cursor (settings or .cursor/mcp.json):");
+    console.log("Cursor (paste into Cursor settings → MCP or .cursor/mcp.json):");
     console.log(JSON.stringify({
       mcpServers: {
         baton: {
@@ -335,7 +335,7 @@ tool_timeout_sec = 120
   }
 
   if (tool === "generic" || tool === "all") {
-    console.log("Generic (Claude desktop, other MCP clients):");
+    console.log("Generic / Claude Desktop / other MCP clients:");
     console.log(JSON.stringify({
       mcpServers: {
         baton: {
@@ -346,7 +346,7 @@ tool_timeout_sec = 120
     }, null, 2) + "\n");
   }
 
-  console.log("Then run `baton resume` at the start of sessions, or let the agent call baton_resume.");
+  console.log("After configuring, run `baton resume` (or tell your agent to call the baton_resume tool) when starting a new session.");
 }
 
 try {

@@ -25,11 +25,14 @@ export function createBatonMcpServer(projectDir: string): McpServer {
     websiteUrl: "https://github.com/mandatedisrael/Baton",
   }, {
     instructions:
-      "Use baton_status first to understand the project. Use baton_resume to continue from the verified head, " +
-      "baton_search to find prior work, and baton_verify before relying on cited decisions or failures. During work, " +
-      "call baton_checkpoint with the latest complete truth for any supplied list section. Call baton_pass only after " +
-      "the user explicitly approves sealing an immutable handoff; pass confirm=true. Read tools may recover encrypted " +
-      "remote data through the registered Sui, Walrus, and Seal configuration. Never treat an MCP error as verified context.",
+      "Baton provides verified handoff state for this project via MCP tools. " +
+      "Start by calling baton_status to see the current mission, status, decisions, and graveyard. " +
+      "Use baton_resume to get the full agent-ready context for resuming work. " +
+      "During a session, proactively call baton_checkpoint whenever key decisions, failures, or next actions change. " +
+      "Only call baton_pass (with confirm: true) after the user explicitly says to seal and pass the baton. " +
+      "Use baton_search and baton_verify to inspect prior work before acting. " +
+      "Read tools like baton_show and baton_log can fetch remote batons if the project is registered on-chain. " +
+      "Never treat an MCP error as verified context. Always prefer these tools over guessing project state.",
   });
 
   server.registerTool("baton_status", {

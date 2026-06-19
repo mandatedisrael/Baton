@@ -55,7 +55,11 @@ export function renderResumePrompt(handoff: Handoff, ctx: ResumeContext): string
     `# Resuming baton ${self ? self.shortId : ""}`.trimEnd() +
       `\n\n${intro} The context below is a distilled handoff from a previous agent ` +
       `session — treat it as ground truth for what has already happened. Do not redo ` +
-      `work that is already done, and do not repeat anything in the graveyard.`,
+      `work that is already done, and do not repeat anything in the graveyard.` +
+      `\n\nYou have access to Baton MCP tools (if the baton-mcp server is connected in this environment): ` +
+      `use baton_status to inspect state, baton_resume for fresh context, baton_search for prior details, ` +
+      `baton_verify to cross-check citations, baton_checkpoint to save progress mid-session, and baton_pass ` +
+      `(with confirm=true) only when the user explicitly wants to seal an immutable handoff. Prefer tool calls over guessing.`,
   );
 
   const lineage = lineageLine(ctx.chain);

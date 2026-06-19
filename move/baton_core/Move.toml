@@ -1,0 +1,8 @@
+[package]
+name = "baton_core"
+edition = "2024"
+license = "Apache-2.0"
+authors = ["Baton Contributors"]
+
+[addresses]
+baton_core = "0x0"

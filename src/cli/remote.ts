@@ -2,7 +2,7 @@ import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { fetchRemoteManifest } from "../chain/manifest.ts";
 import { recoverRemoteHandoff, verifyRemoteHandoff } from "../chain/recovery.ts";
 import { createWalrusRetriever } from "../chain/retrieval.ts";
-import { loadIdentity } from "../chain/identity.ts";
+import { loadIdentity, requireEd25519Identity } from "../chain/identity.ts";
 import { createSealPayloadDecryptor } from "../chain/seal.ts";
 import { BatonError } from "../core/errors.ts";
 import type { Handoff } from "../schema/handoff.ts";
@@ -52,7 +52,8 @@ export async function recoverHandoffFromRemote(
   if (!remote) {
     throw new BatonError("INVALID_STATE", "project is local-only — register it before remote recovery");
   }
-  const { keypair } = loadIdentity(identityPath);
+  const loaded = loadIdentity(identityPath);
+  const { keypair } = requireEd25519Identity(loaded);
   const client = new SuiJsonRpcClient({ network: remote.network, url: remote.rpcUrl });
   const manifest = await fetchRemoteManifest({ client, remote, handoffId });
   const retriever = createWalrusRetriever({ aggregatorUrl: remote.walrus.aggregatorUrl });
@@ -75,7 +76,8 @@ export async function auditHandoffFromRemote(
   }
   const remote = store.config().remote;
   if (!remote) throw new BatonError("INVALID_STATE", "project is local-only — register it before remote audit");
-  const { keypair } = loadIdentity(identityPath);
+  const loaded = loadIdentity(identityPath);
+  const { keypair } = requireEd25519Identity(loaded);
   const client = new SuiJsonRpcClient({ network: remote.network, url: remote.rpcUrl });
   const manifest = await fetchRemoteManifest({ client, remote, handoffId });
   const retriever = createWalrusRetriever({ aggregatorUrl: remote.walrus.aggregatorUrl });

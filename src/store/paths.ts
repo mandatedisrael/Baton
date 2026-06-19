@@ -74,11 +74,14 @@ export function remoteSidecarPath(root: string, handoffId: string): string {
   return join(remoteDir(root), `${handoffId}.json`);
 }
 
-/** Walk up from `start` looking for a .baton directory. Null if none. */
+/** Walk up from `start` looking for a Baton project config. Null if none.
+ * The global identity also lives in ~/.baton, so the directory alone is not
+ * a sufficient project marker.
+ */
 export function findProjectRoot(start: string): string | null {
   let dir = start;
   for (;;) {
-    if (existsSync(batonDir(dir))) return dir;
+    if (existsSync(configPath(dir))) return dir;
     const parent = dirname(dir);
     if (parent === dir) return null;
     dir = parent;

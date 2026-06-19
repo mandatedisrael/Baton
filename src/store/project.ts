@@ -21,12 +21,17 @@ import { hashBytes, hashCanonical } from "../core/hash.ts";
 import { emptyWorkingState, type WorkingState } from "../core/working-state.ts";
 import { parseHandoff, type Attachment, type Handoff } from "../schema/handoff.ts";
 import {
+  parseProjectConfig,
+  type ProjectConfig,
+  type RemoteProjectConfig,
+} from "../schema/project.ts";
+import {
   parseRemoteSidecar,
   parseUploadJob,
   type RemoteSidecar,
   type UploadJob,
 } from "../schema/remote.ts";
-import { isoDatetime, literal, nullable, obj, str } from "../schema/validate.ts";
+import { nullable, obj, str } from "../schema/validate.ts";
 import {
   batonDir,
   attachmentPath,
@@ -56,24 +61,6 @@ export interface CheckpointCursor {
 
 export const EMPTY_CURSOR: CheckpointCursor = { sessionId: null, line: 0, transcriptPath: null };
 
-export interface ProjectConfig {
-  schemaVersion: 1;
-  projectId: string;
-  createdAt: string;
-  /** Latest handoff id, parent of the next pass. Branch heads arrive in phase 3. */
-  head: string | null;
-}
-
-function parseProjectConfig(v: unknown): ProjectConfig {
-  const r = obj(v, "config", ["schemaVersion", "projectId", "createdAt", "head"]);
-  return {
-    schemaVersion: literal(r.schemaVersion, "config.schemaVersion", 1),
-    projectId: str(r.projectId, "config.projectId", { min: 1 }),
-    createdAt: isoDatetime(r.createdAt, "config.createdAt"),
-    head: nullable(r.head, "config.head", (h, p) => str(h, p)),
-  };
-}
-
 export class ProjectStore {
   readonly root: string;
 
@@ -97,6 +84,7 @@ export class ProjectStore {
       projectId: randomUUID(),
       createdAt: now.toISOString(),
       head: null,
+      remote: null,
     });
     store.saveWorkingState(emptyWorkingState(now));
     return store;
@@ -127,6 +115,11 @@ export class ProjectStore {
 
   setHead(id: string): void {
     this.writeConfig({ ...this.config(), head: id });
+  }
+
+  setRemoteConfig(remote: RemoteProjectConfig): void {
+    const config = parseProjectConfig({ ...this.config(), remote });
+    this.writeConfig(config);
   }
 
   // -- working state ----------------------------------------------------------

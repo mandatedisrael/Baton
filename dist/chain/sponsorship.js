@@ -1,9 +1,18 @@
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
+import { Transaction } from "@mysten/sui/transactions";
 import { fromBase64, normalizeSuiAddress, normalizeSuiObjectId, toBase64 } from "@mysten/sui/utils";
 import { timingSafeEqual } from "node:crypto";
 import { BatonError } from "../core/errors.js";
 import { buildRegistrationTransaction, extractRegistrationObjects } from "./registration.js";
 export const SPONSORED_REGISTRATION_GAS_BUDGET = 50000000n;
+export async function sponsoredTransactionDigest(bytes) {
+    try {
+        return await Transaction.from(bytes).getDigest();
+    }
+    catch (err) {
+        throw new BatonError("INVALID_STATE", "could not derive sponsored transaction digest", { cause: err });
+    }
+}
 export async function buildSponsoredRegistrationBytes(input) {
     const gasBudget = input.gasBudget ?? SPONSORED_REGISTRATION_GAS_BUDGET;
     if (input.gasPrice <= 0n)
@@ -73,15 +82,36 @@ export async function executeSponsoredRegistrationWithSignature(input) {
         signature: [input.userSignature, sponsor.signature],
         options: { showEffects: true, showObjectChanges: true },
     });
+    const result = registrationResultFromResponse(response, input.typePackageId);
+    await input.client.waitForTransaction({ digest: response.digest });
+    return result;
+}
+function registrationResultFromResponse(response, typePackageId, expectedDigest) {
+    if (expectedDigest && response.digest !== expectedDigest) {
+        throw new BatonError("INVALID_STATE", "Sui returned a different sponsored transaction digest");
+    }
     if (response.effects?.status.status !== "success") {
         throw new BatonError("IO_ERROR", `sponsored registration failed: ${response.effects?.status.error ?? "unknown error"}`);
     }
     if (!response.objectChanges) {
         throw new BatonError("INVALID_STATE", "sponsored registration response omitted object changes");
     }
-    const objects = extractRegistrationObjects(input.typePackageId, response.objectChanges);
-    await input.client.waitForTransaction({ digest: response.digest });
+    const objects = extractRegistrationObjects(typePackageId, response.objectChanges);
     return { digest: response.digest, ...objects };
+}
+export async function reconcileSponsoredRegistration(input) {
+    const digest = input.transactionDigest ?? await sponsoredTransactionDigest(input.transactionBytes);
+    let response;
+    try {
+        response = await input.client.getTransactionBlock({
+            digest,
+            options: { showEffects: true, showObjectChanges: true },
+        });
+    }
+    catch {
+        return null;
+    }
+    return registrationResultFromResponse(response, input.typePackageId, digest);
 }
 export function serializeSponsoredTransaction(bytes) {
     return toBase64(bytes);

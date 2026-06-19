@@ -1,9 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
-import { fromBase64, toBase64 } from "@mysten/sui/utils";
+import { fromBase64, normalizeSuiObjectId, toBase64 } from "@mysten/sui/utils";
 import {
   buildSponsoredRegistrationBytes,
+  reconcileSponsoredRegistration,
+  sponsoredTransactionDigest,
   verifySponsoredRegistrationEnvelope,
   type SponsoredRegistrationEnvelope,
 } from "../src/chain/sponsorship.ts";
@@ -94,4 +96,42 @@ test("user refuses sponsor substitution, tampering, expiry, and excessive gas", 
     verifySponsoredRegistrationEnvelope({ envelope: { ...value, gasBudget: "50000001" }, packageId: PACKAGE, projectId: "project-1", sender: USER, now: new Date("2026-06-19T12:00:00.000Z") }),
     /gas budget/,
   );
+});
+
+test("interrupted sponsored execution is reconciled by deterministic transaction digest", async () => {
+  const value = await envelope();
+  const bytes = fromBase64(value.transactionBytes);
+  const digest = await sponsoredTransactionDigest(bytes);
+  const normalized = normalizeSuiObjectId(PACKAGE);
+  let requested = "";
+  const result = await reconcileSponsoredRegistration({
+    client: {
+      async getTransactionBlock(input: { digest: string }) {
+        requested = input.digest;
+        return {
+          digest,
+          effects: { status: { status: "success" } },
+          objectChanges: [
+            { type: "created", objectType: `${normalized}::memory::ProjectMemory`, objectId: "0xproject" },
+            { type: "created", objectType: `${normalized}::memory::OwnerCap`, objectId: "0xcap" },
+          ],
+        };
+      },
+    } as never,
+    transactionBytes: bytes,
+    transactionDigest: digest,
+    typePackageId: PACKAGE,
+  });
+  assert.equal(requested, digest);
+  assert.deepEqual(result, { digest, projectObjectId: "0xproject", ownerCapId: "0xcap" });
+});
+
+test("reconciliation returns null when the deterministic transaction is not on Sui", async () => {
+  const value = await envelope();
+  const result = await reconcileSponsoredRegistration({
+    client: { async getTransactionBlock() { throw new Error("not found"); } } as never,
+    transactionBytes: fromBase64(value.transactionBytes),
+    typePackageId: PACKAGE,
+  });
+  assert.equal(result, null);
 });

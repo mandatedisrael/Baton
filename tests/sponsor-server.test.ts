@@ -6,8 +6,9 @@ import { join } from "node:path";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { normalizeSuiObjectId } from "@mysten/sui/utils";
 import { registerProjectWithSponsor, validateSponsorUrl } from "../src/chain/sponsor-client.ts";
+import { sponsoredTransactionDigest } from "../src/chain/sponsorship.ts";
 import { createSponsorServer } from "../src/sponsor/server.ts";
-import { issueSponsorInvite, issueSponsorInviteDetails } from "../src/sponsor/state.ts";
+import { issueSponsorInvite, issueSponsorInviteDetails, listSponsorInvites } from "../src/sponsor/state.ts";
 
 const PACKAGE = normalizeSuiObjectId("0x1234");
 let root: string;
@@ -304,5 +305,89 @@ test("recipient-bound invitations are refused before gas metadata is fetched", a
     assert.equal(rpcCalls, 0);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test("a restart reconciles chain success after local completion was interrupted", async () => {
+  const sponsor = new Ed25519Keypair();
+  const user = new Ed25519Keypair();
+  const statePath = join(root, "sponsor.json");
+  const token = issueSponsorInvite(statePath, new Date(), 1);
+  let executions = 0;
+  let lookups = 0;
+  let chainResponse: Record<string, unknown> | undefined;
+  const client = {
+    async getLatestSuiSystemState() { return { epoch: "1200" }; },
+    async getReferenceGasPrice() { return 1000n; },
+    async getCoins() {
+      return {
+        data: [{ coinObjectId: "0x99", version: "1", digest: "2E3Wu14rQZ4rqfSi8Ve1arY4HWd1wv2cZmJbdatMgv2p", balance: "100000000" }],
+        hasNextPage: false,
+        nextCursor: null,
+      };
+    },
+    async executeTransactionBlock(input: { transactionBlock: Uint8Array }) {
+      executions += 1;
+      const digest = await sponsoredTransactionDigest(input.transactionBlock);
+      chainResponse = {
+        digest,
+        effects: { status: { status: "success" } },
+        objectChanges: [
+          { type: "created", objectType: `${PACKAGE}::memory::ProjectMemory`, objectId: "0xproject" },
+          { type: "created", objectType: `${PACKAGE}::memory::OwnerCap`, objectId: "0xcap" },
+        ],
+      };
+      return chainResponse;
+    },
+    async waitForTransaction() { throw new Error("simulated indexing interruption"); },
+    async getTransactionBlock() {
+      lookups += 1;
+      if (!chainResponse) throw new Error("not found");
+      return chainResponse;
+    },
+  };
+  const start = () => {
+    const server = createSponsorServer({
+      client: client as never,
+      sponsorKeypair: sponsor,
+      statePath,
+      policyPackageId: PACKAGE,
+      typePackageId: PACKAGE,
+    });
+    return new Promise<{ server: typeof server; url: string }>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address();
+        assert(address && typeof address === "object");
+        resolve({ server, url: `http://127.0.0.1:${address.port}` });
+      });
+    });
+  };
+
+  const first = await start();
+  await assert.rejects(
+    registerProjectWithSponsor({ sponsorUrl: first.url, inviteToken: token, packageId: PACKAGE, projectId: "project-1", userKeypair: user }),
+    /simulated indexing interruption/,
+  );
+  await new Promise<void>((resolve) => first.server.close(() => resolve()));
+  assert.equal(executions, 1);
+  assert.equal(listSponsorInvites(statePath)[0]?.status, "submitted");
+
+  const restarted = await start();
+  try {
+    const result = await registerProjectWithSponsor({
+      sponsorUrl: restarted.url,
+      inviteToken: token,
+      packageId: PACKAGE,
+      projectId: "project-1",
+      userKeypair: user,
+    });
+    assert.equal(result.projectObjectId, "0xproject");
+    assert.equal(executions, 1);
+    assert.equal(lookups, 1);
+    assert.equal(listSponsorInvites(statePath)[0]?.status, "used");
+    assert.match(await (await fetch(`${restarted.url}/metrics`)).text(), /baton_sponsor_reconciled_total 1/);
+  } finally {
+    await new Promise<void>((resolve) => restarted.server.close(() => resolve()));
   }
 });

@@ -11,6 +11,7 @@ import {
   issueSponsorInviteDetails,
   listSponsorInvites,
   loadSponsorReservation,
+  markSponsorReservationSubmitted,
   pruneSponsorInvites,
   revokeSponsorInvite,
   saveSponsorReservation,
@@ -31,6 +32,8 @@ function reservation(): SponsorReservation {
   return {
     requestId: "request-1",
     transactionBytes: "bytes",
+    transactionDigest: "HcmxyxYj9xEPxim7UWDesTWG1kB7hAP6eTxVMq2v39Z8",
+    submittedAt: null,
     sponsor: "0x1",
     gasPrice: "1000",
     gasBudget: "50000000",
@@ -151,4 +154,24 @@ test("usage snapshots bound daily liability and count only live reservations", (
     sponsorUsageSnapshot(path, new Date("2026-06-20T12:11:00.000Z")),
     { completedToday: 0, activeReservations: 0 },
   );
+});
+
+test("submitted reservations survive expiry and cannot be revoked or pruned before reconciliation", () => {
+  const now = new Date("2026-06-19T12:00:00.000Z");
+  const token = issueSponsorInviteDetails(path, now, 1);
+  saveSponsorReservation(path, token.token, reservation(), now);
+  const submitted = markSponsorReservationSubmitted(
+    path,
+    token.token,
+    "request-1",
+    "HcmxyxYj9xEPxim7UWDesTWG1kB7hAP6eTxVMq2v39Z8",
+    now,
+  );
+  assert.equal(submitted.submittedAt, now.toISOString());
+  const afterExpiry = new Date("2026-06-20T12:00:00.000Z");
+  assert.equal(loadSponsorReservation(path, token.token, "request-1", afterExpiry).submittedAt, now.toISOString());
+  assert.equal(listSponsorInvites(path, afterExpiry)[0]?.status, "submitted");
+  assert.throws(() => revokeSponsorInvite(path, token.id, afterExpiry), /must be reconciled/);
+  assert.equal(pruneSponsorInvites(path, afterExpiry), 0);
+  assert.deepEqual(sponsorUsageSnapshot(path, afterExpiry), { completedToday: 0, activeReservations: 1 });
 });

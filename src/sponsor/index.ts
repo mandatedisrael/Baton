@@ -9,6 +9,7 @@ import {
 import { SPONSORED_REGISTRATION_GAS_BUDGET } from "../chain/sponsorship.ts";
 import { BatonError } from "../core/errors.ts";
 import { createSponsorServer } from "./server.ts";
+import { reconcileSponsorState } from "./reconcile.ts";
 import {
   defaultSponsorStatePath,
   issueSponsorInviteDetails,
@@ -25,6 +26,7 @@ Usage:
   baton-sponsor list [--state <file>] [--json]
   baton-sponsor revoke --id <invite-id> [--state <file>]
   baton-sponsor prune [--state <file>]
+  baton-sponsor reconcile [--state <file>]
   baton-sponsor serve [--state <file>] [--identity <file>] [--port <port>]
     [--trust-proxy] [--rate-limit <per-minute>] [--daily-limit <count>] [--max-active <count>]
 
@@ -90,6 +92,18 @@ async function main(): Promise<void> {
     process.stderr.write(`Pruned ${removed} expired or revoked sponsor invitation(s).\n`);
     return;
   }
+  if (command === "reconcile") {
+    const client = new SuiJsonRpcClient({ network: "testnet", url: TESTNET_RPC_URL });
+    const summary = await reconcileSponsorState({
+      client,
+      statePath,
+      typePackageId: BATON_CORE_TESTNET_ORIGINAL_PACKAGE,
+    });
+    process.stderr.write(
+      `Reconciled ${summary.completed}/${summary.checked} submitted registration(s) · ${summary.pending} still pending.\n`,
+    );
+    return;
+  }
   if (command !== "serve") throw new BatonError("INVALID_STATE", `unknown sponsor command: ${command}`);
   const rawPort = flag(args, "--port") ?? "8787";
   if (!/^\d+$/.test(rawPort) || Number(rawPort) < 1 || Number(rawPort) > 65535) {
@@ -98,6 +112,16 @@ async function main(): Promise<void> {
   const identityPath = flag(args, "--identity") ?? process.env.BATON_SPONSOR_IDENTITY;
   const { record, keypair } = loadIdentity(identityPath);
   const client = new SuiJsonRpcClient({ network: "testnet", url: TESTNET_RPC_URL });
+  const recovered = await reconcileSponsorState({
+    client,
+    statePath,
+    typePackageId: BATON_CORE_TESTNET_ORIGINAL_PACKAGE,
+  });
+  if (recovered.checked > 0) {
+    process.stderr.write(
+      `Sponsor reconciliation · ${recovered.completed} completed · ${recovered.pending} still pending\n`,
+    );
+  }
   const balance = await client.getBalance({ owner: record.address });
   if (BigInt(balance.totalBalance) < SPONSORED_REGISTRATION_GAS_BUDGET) {
     throw new BatonError(

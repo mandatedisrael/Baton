@@ -5,8 +5,8 @@ import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { fromBase64, normalizeSuiAddress } from "@mysten/sui/utils";
 import { isValidTransactionSignature } from "@mysten/sui/verify";
 import { BatonError } from "../core/errors.js";
-import { buildSponsoredRegistrationBytes, executeSponsoredRegistrationWithSignature, serializeSponsoredTransaction, SPONSORED_REGISTRATION_GAS_BUDGET, } from "../chain/sponsorship.js";
-import { completeSponsorReservation, existingSponsorReservation, loadSponsorReservation, saveSponsorReservation, sponsorUsageSnapshot, reservedSponsorGasObjects, withSponsorStateLock, } from "./state.js";
+import { buildSponsoredRegistrationBytes, executeSponsoredRegistrationWithSignature, reconcileSponsoredRegistration, serializeSponsoredTransaction, SPONSORED_REGISTRATION_GAS_BUDGET, sponsoredTransactionDigest, } from "../chain/sponsorship.js";
+import { completeSponsorReservation, existingSponsorReservation, loadSponsorReservation, markSponsorReservationSubmitted, saveSponsorReservation, sponsorUsageSnapshot, reservedSponsorGasObjects, withSponsorStateLock, } from "./state.js";
 const MAX_BODY_BYTES = 16 * 1024;
 const REQUEST_TTL_MS = 5 * 60 * 1000;
 const RATE_WINDOW_MS = 60 * 1000;
@@ -40,6 +40,9 @@ function metrics(response, values, usage, limits) {
         "# HELP baton_sponsor_readiness_failures_total Readiness checks that could not prove spend capacity.",
         "# TYPE baton_sponsor_readiness_failures_total counter",
         `baton_sponsor_readiness_failures_total ${values.readinessFailures}`,
+        "# HELP baton_sponsor_reconciled_total Interrupted submissions recovered from Sui without re-execution.",
+        "# TYPE baton_sponsor_reconciled_total counter",
+        `baton_sponsor_reconciled_total ${values.reconciled}`,
         "# HELP baton_sponsor_completed_today Completed registrations since 00:00 UTC.",
         "# TYPE baton_sponsor_completed_today gauge",
         `baton_sponsor_completed_today ${usage.completedToday}`,
@@ -142,7 +145,14 @@ export function createSponsorServer(options) {
         if (!Number.isInteger(value) || value < 1)
             throw new BatonError("INVALID_STATE", `${name} must be a positive integer`);
     }
-    const counters = { prepared: 0, completed: 0, rejected: 0, rateLimited: 0, readinessFailures: 0 };
+    const counters = {
+        prepared: 0,
+        completed: 0,
+        rejected: 0,
+        rateLimited: 0,
+        readinessFailures: 0,
+        reconciled: 0,
+    };
     const server = createServer(async (request, response) => {
         const isRegistration = request.method === "POST" &&
             (request.url === "/v1/register/prepare" || request.url === "/v1/register/execute");
@@ -229,9 +239,12 @@ export function createSponsorServer(options) {
                         gasPayment,
                         expirationEpoch,
                     });
+                    const transactionDigest = await sponsoredTransactionDigest(transactionBytes);
                     const reservation = {
                         requestId: randomUUID(),
                         transactionBytes: serializeSponsoredTransaction(transactionBytes),
+                        transactionDigest,
+                        submittedAt: null,
                         sponsor: options.sponsorKeypair.toSuiAddress(),
                         gasPrice: gasPrice.toString(),
                         gasBudget: SPONSORED_REGISTRATION_GAS_BUDGET.toString(),
@@ -251,19 +264,33 @@ export function createSponsorServer(options) {
             }
             if (request.method === "POST" && request.url === "/v1/register/execute") {
                 const input = strictStrings(await body(request), ["token", "requestId", "userSignature"]);
-                const result = await withSponsorStateLock(options.statePath, async () => {
+                const execution = await withSponsorStateLock(options.statePath, async () => {
                     const reservation = loadSponsorReservation(options.statePath, input.token, input.requestId, now());
                     if (reservation.result)
-                        return reservation.result;
+                        return { result: reservation.result, reconciled: false };
                     if (inFlight.has(reservation.requestId))
                         throw new BatonError("INVALID_STATE", "sponsored registration is already executing");
                     const transactionBytes = fromBase64(reservation.transactionBytes);
+                    if (reservation.submittedAt) {
+                        const recovered = await reconcileSponsoredRegistration({
+                            client: options.client,
+                            transactionBytes,
+                            transactionDigest: reservation.transactionDigest,
+                            typePackageId: options.typePackageId,
+                        });
+                        if (recovered) {
+                            completeSponsorReservation(options.statePath, input.token, reservation.requestId, recovered, now());
+                            return { result: recovered, reconciled: true };
+                        }
+                    }
                     const valid = await isValidTransactionSignature(transactionBytes, input.userSignature, {
                         client: options.client,
                         address: reservation.sender,
                     });
                     if (!valid)
                         throw new BatonError("INVALID_STATE", "user signature does not authorize the sponsored registration");
+                    const transactionDigest = reservation.transactionDigest ?? await sponsoredTransactionDigest(transactionBytes);
+                    markSponsorReservationSubmitted(options.statePath, input.token, reservation.requestId, transactionDigest, now());
                     inFlight.add(reservation.requestId);
                     try {
                         const executed = await executeSponsoredRegistrationWithSignature({
@@ -274,14 +301,16 @@ export function createSponsorServer(options) {
                             typePackageId: options.typePackageId,
                         });
                         completeSponsorReservation(options.statePath, input.token, reservation.requestId, executed, now());
-                        return executed;
+                        return { result: executed, reconciled: false };
                     }
                     finally {
                         inFlight.delete(reservation.requestId);
                     }
                 }, 90_000);
+                if (execution.reconciled)
+                    counters.reconciled += 1;
                 counters.completed += 1;
-                json(response, 200, result);
+                json(response, 200, execution.result);
                 return;
             }
             json(response, 404, { error: "not found" });

@@ -20,6 +20,8 @@ import type { RegistrationResult } from "../chain/registration.ts";
 import type { SponsoredRegistrationEnvelope } from "../chain/sponsorship.ts";
 
 export interface SponsorReservation extends SponsoredRegistrationEnvelope {
+  transactionDigest: string | null;
+  submittedAt: string | null;
   sender: string;
   projectId: string;
   result: RegistrationResult | null;
@@ -126,7 +128,7 @@ export interface SponsorInviteSummary {
   expiresAt: string;
   recipient: string | null;
   projectId: string | null;
-  status: "available" | "reserved" | "used" | "revoked" | "expired";
+  status: "available" | "reserved" | "submitted" | "used" | "revoked" | "expired";
   requestId: string | null;
   digest: string | null;
 }
@@ -134,6 +136,11 @@ export interface SponsorInviteSummary {
 export interface SponsorUsageSnapshot {
   completedToday: number;
   activeReservations: number;
+}
+
+export interface SubmittedSponsorReservation {
+  inviteId: string;
+  reservation: SponsorReservation;
 }
 
 function projectId(value: string): string {
@@ -151,10 +158,18 @@ function parseReservation(value: unknown, index: number): SponsorReservation | n
   if (value === null) return null;
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new BatonError("INVALID_STATE", `invalid sponsor reservation at ${index}`);
   const record = value as Record<string, unknown>;
-  const keys = ["requestId", "transactionBytes", "sponsor", "gasPrice", "gasBudget", "gasPayment", "expirationEpoch", "expiresAt", "sender", "projectId", "result"];
+  const keys = ["requestId", "transactionBytes", "transactionDigest", "submittedAt", "sponsor", "gasPrice", "gasBudget", "gasPayment", "expirationEpoch", "expiresAt", "sender", "projectId", "result"];
   if (Object.keys(record).some((key) => !keys.includes(key))) throw new BatonError("INVALID_STATE", `unknown sponsor reservation field at ${index}`);
-  for (const key of keys.filter((key) => key !== "result" && key !== "gasPayment")) {
+  for (const key of keys.filter((key) => !["result", "gasPayment", "transactionDigest", "submittedAt"].includes(key))) {
     if (typeof record[key] !== "string" || record[key].length === 0) throw new BatonError("INVALID_STATE", `invalid sponsor reservation ${key} at ${index}`);
+  }
+  const transactionDigest = record.transactionDigest === undefined ? null : record.transactionDigest;
+  const submittedAt = record.submittedAt === undefined ? null : record.submittedAt;
+  if (transactionDigest !== null && (typeof transactionDigest !== "string" || transactionDigest.length === 0)) {
+    throw new BatonError("INVALID_STATE", `invalid sponsor transactionDigest at ${index}`);
+  }
+  if (submittedAt !== null && (typeof submittedAt !== "string" || !Number.isFinite(Date.parse(submittedAt)))) {
+    throw new BatonError("INVALID_STATE", `invalid sponsor submittedAt at ${index}`);
   }
   if (!Array.isArray(record.gasPayment) || record.gasPayment.length !== 1) throw new BatonError("INVALID_STATE", `invalid sponsor gas payment at ${index}`);
   const gasPayment = record.gasPayment.map((payment) => {
@@ -172,7 +187,13 @@ function parseReservation(value: unknown, index: number): SponsorReservation | n
     if (typeof raw.digest !== "string" || typeof raw.projectObjectId !== "string" || typeof raw.ownerCapId !== "string") throw new BatonError("INVALID_STATE", `invalid sponsor result at ${index}`);
     result = { digest: raw.digest, projectObjectId: raw.projectObjectId, ownerCapId: raw.ownerCapId };
   }
-  return { ...(record as unknown as Omit<SponsorReservation, "result" | "gasPayment">), gasPayment, result };
+  return {
+    ...(record as unknown as Omit<SponsorReservation, "transactionDigest" | "submittedAt" | "result" | "gasPayment">),
+    transactionDigest,
+    submittedAt,
+    gasPayment,
+    result,
+  };
 }
 
 function parseState(value: unknown): SponsorState {
@@ -240,7 +261,9 @@ function activeInvite(path: string, token: string, now: Date): { state: SponsorS
   if (!invite) throw new BatonError("NOT_FOUND", "sponsor invitation is unknown");
   if (invite.revokedAt) throw new BatonError("INVALID_STATE", "sponsor invitation has been revoked");
   if (invite.usedAt) return { state, invite };
-  if (Date.parse(invite.expiresAt) <= now.getTime()) throw new BatonError("INVALID_STATE", "sponsor invitation has expired");
+  if (Date.parse(invite.expiresAt) <= now.getTime() && !invite.reservation?.submittedAt) {
+    throw new BatonError("INVALID_STATE", "sponsor invitation has expired");
+  }
   return { state, invite };
 }
 
@@ -299,7 +322,7 @@ export function existingSponsorReservation(input: {
     throw new BatonError("INVALID_STATE", "sponsor invitation is reserved for another registration");
   }
   if (invite.usedAt && reservation.result) return reservation;
-  if (Date.parse(reservation.expiresAt) <= (input.now ?? new Date()).getTime()) return null;
+  if (Date.parse(reservation.expiresAt) <= (input.now ?? new Date()).getTime() && !reservation.submittedAt) return null;
   return reservation;
 }
 
@@ -315,7 +338,29 @@ export function loadSponsorReservation(path: string, token: string, requestId: s
   const { invite } = activeInvite(path, token, now);
   const reservation = invite.reservation;
   if (!reservation || reservation.requestId !== requestId) throw new BatonError("NOT_FOUND", "sponsored registration request is unknown");
-  if (!reservation.result && Date.parse(reservation.expiresAt) <= now.getTime()) throw new BatonError("INVALID_STATE", "sponsored registration request has expired");
+  if (!reservation.result && !reservation.submittedAt && Date.parse(reservation.expiresAt) <= now.getTime()) {
+    throw new BatonError("INVALID_STATE", "sponsored registration request has expired");
+  }
+  return reservation;
+}
+
+export function markSponsorReservationSubmitted(
+  path: string,
+  token: string,
+  requestId: string,
+  transactionDigest: string,
+  now = new Date(),
+): SponsorReservation {
+  const { state, invite } = activeInvite(path, token, now);
+  const reservation = invite.reservation;
+  if (!reservation || reservation.requestId !== requestId) throw new BatonError("NOT_FOUND", "sponsored registration request is unknown");
+  if (reservation.result) return reservation;
+  if (reservation.transactionDigest && reservation.transactionDigest !== transactionDigest) {
+    throw new BatonError("INVALID_STATE", "sponsored registration digest changed after reservation");
+  }
+  reservation.transactionDigest = transactionDigest;
+  reservation.submittedAt ??= now.toISOString();
+  writeState(path, state);
   return reservation;
 }
 
@@ -333,12 +378,44 @@ export function completeSponsorReservation(
   writeState(path, state);
 }
 
+export function submittedSponsorReservations(path = defaultSponsorStatePath()): SubmittedSponsorReservation[] {
+  return readState(path).invites.flatMap((invite) => {
+    const reservation = invite.reservation;
+    if (!reservation?.submittedAt || reservation.result) return [];
+    return [{ inviteId: invite.id, reservation: structuredClone(reservation) }];
+  });
+}
+
+export function completeSubmittedSponsorReservation(
+  path: string,
+  inviteId: string,
+  requestId: string,
+  result: RegistrationResult,
+  now = new Date(),
+): void {
+  const state = readState(path);
+  const invite = state.invites.find((entry) => entry.id === inviteId);
+  if (!invite?.reservation || invite.reservation.requestId !== requestId) {
+    throw new BatonError("NOT_FOUND", "submitted sponsor reservation is unknown");
+  }
+  if (!invite.reservation.submittedAt) throw new BatonError("INVALID_STATE", "sponsor reservation was not submitted");
+  if (invite.reservation.result) {
+    if (invite.reservation.result.digest !== result.digest) {
+      throw new BatonError("INVALID_STATE", "submitted sponsor result conflicts with durable state");
+    }
+    return;
+  }
+  invite.reservation.result = result;
+  invite.usedAt = now.toISOString();
+  writeState(path, state);
+}
+
 export function reservedSponsorGasObjects(path: string, now = new Date()): Set<string> {
   const state = readState(path);
   const reserved = new Set<string>();
   for (const invite of state.invites) {
     const reservation = invite.reservation;
-    if (!reservation || reservation.result || Date.parse(reservation.expiresAt) <= now.getTime()) continue;
+    if (!reservation || reservation.result || (!reservation.submittedAt && Date.parse(reservation.expiresAt) <= now.getTime())) continue;
     for (const payment of reservation.gasPayment) reserved.add(payment.objectId.toLowerCase());
   }
   return reserved;
@@ -355,7 +432,9 @@ export function listSponsorInvites(path = defaultSponsorStatePath(), now = new D
       ? "revoked"
       : invite.usedAt
         ? "used"
-        : Date.parse(invite.expiresAt) <= now.getTime()
+          : invite.reservation?.submittedAt
+            ? "submitted"
+            : Date.parse(invite.expiresAt) <= now.getTime()
           ? "expired"
           : invite.reservation
             ? "reserved"
@@ -373,7 +452,8 @@ export function sponsorUsageSnapshot(path = defaultSponsorStatePath(), now = new
   for (const invite of state.invites) {
     if (invite.usedAt && Date.parse(invite.usedAt) >= startOfDay) completedToday += 1;
     const reservation = invite.reservation;
-    if (!invite.revokedAt && !invite.usedAt && reservation && !reservation.result && Date.parse(reservation.expiresAt) > now.getTime()) {
+    if (!invite.revokedAt && !invite.usedAt && reservation && !reservation.result &&
+      (reservation.submittedAt !== null || Date.parse(reservation.expiresAt) > now.getTime())) {
       activeReservations += 1;
     }
   }
@@ -385,6 +465,9 @@ export function revokeSponsorInvite(path: string, id: string, now = new Date()):
   const invite = state.invites.find((entry) => entry.id === id);
   if (!invite) throw new BatonError("NOT_FOUND", `sponsor invitation ${id} is unknown`);
   if (invite.usedAt) throw new BatonError("INVALID_STATE", "a used sponsor invitation cannot be revoked");
+  if (invite.reservation?.submittedAt) {
+    throw new BatonError("INVALID_STATE", "a submitted sponsor invitation must be reconciled before it can be changed");
+  }
   if (!invite.revokedAt) {
     invite.revokedAt = now.toISOString();
     writeState(path, state);
@@ -394,9 +477,11 @@ export function revokeSponsorInvite(path: string, id: string, now = new Date()):
 export function pruneSponsorInvites(path = defaultSponsorStatePath(), now = new Date()): number {
   const state = readState(path);
   const before = state.invites.length;
-  state.invites = state.invites.filter((invite) =>
-    invite.usedAt !== null || (invite.revokedAt === null && Date.parse(invite.expiresAt) > now.getTime()),
-  );
+  state.invites = state.invites.filter((invite) => {
+    const potentiallySubmitted = invite.reservation?.submittedAt != null;
+    return invite.usedAt !== null || potentiallySubmitted ||
+      (invite.revokedAt === null && Date.parse(invite.expiresAt) > now.getTime());
+  });
   const removed = before - state.invites.length;
   if (removed > 0) writeState(path, state);
   return removed;

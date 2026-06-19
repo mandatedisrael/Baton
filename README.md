@@ -158,7 +158,8 @@ baton register       # create this project's on-chain memory object
 baton pass           # seal the working state into a baton
 baton queue encrypt  # encrypt queued payloads through Seal
 baton publish        # encrypt, upload to Walrus, and anchor on Sui
-baton resume         # render the resume prompt for the next agent
+baton fetch <id>     # recover a missing baton through Sui, Walrus, and Seal
+baton resume         # verify/recover, then render for the next agent
 ```
 
 (In this repo, run commands as `npm run baton -- <command>` until installed globally.)
@@ -175,6 +176,7 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 | `baton fund-storage [--amount <mist>]` | Exchange Testnet SUI for WAL through the official Walrus exchange. |
 | `baton register [--package <id>] [--rpc <url>]` | Register the project against the canonical Testnet package. |
 | `baton publish` | Resume every queued baton through Seal encryption, Walrus certification, and Sui anchoring. |
+| `baton fetch <full-id>` | Recover and authenticate a missing baton and all attachments from Sui, Walrus, and Seal. |
 | `baton status` | Show the current working state. |
 | `baton pass` | Seal the working state into a baton (commit). |
 | `baton log` | List batons, newest first (`*` marks the head). |
@@ -200,7 +202,7 @@ Handoffs are clearly the primitive every agent vendor wants — Cursor and Codex
 
 Baton is the handoff layer **nobody owns but you**: encrypted client-side, stored on neutral infrastructure, verifiable on-chain, shareable and revocable.
 
-The Move package and full publication flow are deployed and verified on Testnet: Seal encryption, resumable Walrus storage, and Sui manifest anchoring all run against live infrastructure. Exact object, blob, hash, and transaction evidence lives in [docs/deployments.md](docs/deployments.md). Remote decryption and sharing/revocation UX are still in progress, so Baton does not yet claim Mainnet readiness.
+The complete owner-controlled storage path is deployed and verified on Testnet: Seal encryption/decryption, resumable Walrus storage/retrieval, Sui manifest anchoring, attachment restoration, and automatic recovery during `resume` all run against live infrastructure. Exact object, blob, hash, and transaction evidence lives in [docs/deployments.md](docs/deployments.md). Sharing/revocation UX and Mainnet deployment are still in progress, so Baton does not yet claim Mainnet readiness.
 
 ---
 

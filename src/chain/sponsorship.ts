@@ -1,0 +1,120 @@
+import type { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
+import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
+import { fromBase64, normalizeSuiAddress, normalizeSuiObjectId, toBase64 } from "@mysten/sui/utils";
+import { timingSafeEqual } from "node:crypto";
+import { BatonError } from "../core/errors.ts";
+import { buildRegistrationTransaction, extractRegistrationObjects, type RegistrationResult } from "./registration.ts";
+
+export const SPONSORED_REGISTRATION_GAS_BUDGET = 50_000_000n;
+
+export interface SponsoredRegistrationEnvelope {
+  requestId: string;
+  transactionBytes: string;
+  sponsor: string;
+  gasPrice: string;
+  gasBudget: string;
+  expirationEpoch: string;
+  expiresAt: string;
+}
+
+export async function buildSponsoredRegistrationBytes(input: {
+  packageId: string;
+  projectId: string;
+  sender: string;
+  sponsor: string;
+  gasPrice: bigint;
+  gasBudget?: bigint;
+  expirationEpoch: bigint;
+}): Promise<Uint8Array> {
+  const gasBudget = input.gasBudget ?? SPONSORED_REGISTRATION_GAS_BUDGET;
+  if (input.gasPrice <= 0n) throw new BatonError("INVALID_STATE", "sponsored gas price must be positive");
+  if (gasBudget <= 0n || gasBudget > SPONSORED_REGISTRATION_GAS_BUDGET) {
+    throw new BatonError("INVALID_STATE", `sponsored gas budget must be 1–${SPONSORED_REGISTRATION_GAS_BUDGET}`);
+  }
+  if (input.expirationEpoch <= 0n) throw new BatonError("INVALID_STATE", "sponsored expiration epoch must be positive");
+  const tx = buildRegistrationTransaction(normalizeSuiObjectId(input.packageId), input.projectId);
+  tx.setSender(normalizeSuiAddress(input.sender));
+  tx.setGasOwner(normalizeSuiAddress(input.sponsor));
+  // Address-balance sponsorship avoids mutable gas-coin references and lets
+  // both parties sign exactly the same deterministic transaction bytes.
+  tx.setGasPayment([]);
+  tx.setGasPrice(input.gasPrice);
+  tx.setGasBudget(gasBudget);
+  tx.setExpiration({ Epoch: input.expirationEpoch.toString() });
+  return tx.build();
+}
+
+export async function verifySponsoredRegistrationEnvelope(input: {
+  envelope: SponsoredRegistrationEnvelope;
+  packageId: string;
+  projectId: string;
+  sender: string;
+  now?: Date;
+}): Promise<Uint8Array> {
+  const expiresAt = Date.parse(input.envelope.expiresAt);
+  if (!Number.isFinite(expiresAt) || expiresAt <= (input.now ?? new Date()).getTime()) {
+    throw new BatonError("INVALID_STATE", "sponsored registration request has expired");
+  }
+  let gasPrice: bigint;
+  let gasBudget: bigint;
+  let expirationEpoch: bigint;
+  try {
+    gasPrice = BigInt(input.envelope.gasPrice);
+    gasBudget = BigInt(input.envelope.gasBudget);
+    expirationEpoch = BigInt(input.envelope.expirationEpoch);
+  } catch {
+    throw new BatonError("INVALID_STATE", "sponsor returned invalid gas metadata");
+  }
+  const expected = await buildSponsoredRegistrationBytes({
+    packageId: input.packageId,
+    projectId: input.projectId,
+    sender: input.sender,
+    sponsor: input.envelope.sponsor,
+    gasPrice,
+    gasBudget,
+    expirationEpoch,
+  });
+  let received: Uint8Array;
+  try {
+    received = fromBase64(input.envelope.transactionBytes);
+  } catch (err) {
+    throw new BatonError("INVALID_STATE", "sponsor returned invalid transaction bytes", { cause: err });
+  }
+  if (expected.byteLength !== received.byteLength || !timingSafeEqual(expected, received)) {
+    throw new BatonError("INVALID_STATE", "sponsor transaction does not exactly match the requested Baton registration");
+  }
+  return received;
+}
+
+export async function executeSponsoredRegistration(input: {
+  client: SuiJsonRpcClient;
+  userKeypair: Ed25519Keypair;
+  sponsorKeypair: Ed25519Keypair;
+  transactionBytes: Uint8Array;
+}): Promise<RegistrationResult> {
+  const user = await input.userKeypair.signTransaction(input.transactionBytes);
+  const sponsor = await input.sponsorKeypair.signTransaction(input.transactionBytes);
+  const response = await input.client.executeTransactionBlock({
+    transactionBlock: input.transactionBytes,
+    signature: [user.signature, sponsor.signature],
+    options: { showEffects: true, showObjectChanges: true },
+  });
+  if (response.effects?.status.status !== "success") {
+    throw new BatonError("IO_ERROR", `sponsored registration failed: ${response.effects?.status.error ?? "unknown error"}`);
+  }
+  if (!response.objectChanges) {
+    throw new BatonError("INVALID_STATE", "sponsored registration response omitted object changes");
+  }
+  const packageId = response.objectChanges.find((change) => change.type === "created" && change.objectType?.endsWith("::memory::OwnerCap"));
+  if (!packageId || packageId.type !== "created") {
+    throw new BatonError("INVALID_STATE", "sponsored registration did not create an OwnerCap");
+  }
+  const modulePackage = packageId.objectType.slice(0, packageId.objectType.indexOf("::"));
+  const objects = extractRegistrationObjects(modulePackage, response.objectChanges);
+  await input.client.waitForTransaction({ digest: response.digest });
+  return { digest: response.digest, ...objects };
+}
+
+export function serializeSponsoredTransaction(bytes: Uint8Array): string {
+  return toBase64(bytes);
+}

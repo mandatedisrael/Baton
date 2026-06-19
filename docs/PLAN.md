@@ -1,7 +1,7 @@
 # BATON — Build Plan
 ### The verifiable handoff & memory protocol for coding agents, on Sui + Walrus + Seal
 
-**Status:** Phases 1–2 complete. The local engine now includes transcript capture, micro-checkpoint distillation, durable scrubbed source attachments, fidelity grading, review/resume rendering, and claim verification. Phase 3 (Seal + Walrus + Sui) is next.
+**Status:** Phases 1–2 complete. Phase 3 is in progress: every local pass now creates a strict, crash-safe publication job with per-blob progress, retry state, and separate remote sidecar metadata. Seal encryption, Walrus transport, and Sui anchoring are the next slices.
 
 > **Implementation note (kept in sync with the code):** the foundation hashes canonical JSON with **SHA-256** (a Node built-in — preserves the zero-runtime-dependency rule), not BLAKE3. The algorithm is recorded alongside every hash, so a future move to BLAKE3 is a *tagged migration*, not a flag day. The runtime is **Node ≥ 22.18** (native TypeScript execution).
 
@@ -160,8 +160,8 @@ Handoff schema v1 + strict validator (the wire format). Canonical JSON + SHA-256
 **Phase 2 — Distiller** *(done for Claude Code; Codex/Cursor adapters remain integration work)*
 Claude Code hooks → transcripts. The micro-checkpoint loop: event hooks → delta extraction → WorkingState patch ops. Pass-as-commit finalization. Secrets scrubber over the distillate and source. Durable content-addressed attachments. Fidelity grader + rubric v1. Review-gate UX. Dialect renderer + resume prompts. Deterministic fallback and `baton verify` cross-examination. **Dogfood from the start: build BATON using BATON.** Tracked metrics: graveyard recall (does the handoff contain what actually failed?) and fidelity-score distribution.
 
-**Phase 3 — Chain & storage**
-Move package (`baton_core`) on testnet: ProjectMemory, HandoffManifest, AccessCap, ToolAttestation. Walrus blob storage via the TS SDK. Seal client-side encryption + policy. Async upload queue (`pass` never blocks on network) + local encrypted cache. Verify-on-resume against the manifest. Confirm Seal revocation/rotation semantics here.
+**Phase 3 — Chain & storage** *(in progress: durable queue and remote sidecars implemented)*
+Move package (`baton_core`) on testnet: ProjectMemory, HandoffManifest, AccessCap, ToolAttestation. Walrus blob storage via the TS SDK. Seal client-side encryption + policy. The local async queue now records per-blob encryption/upload progress, retries, and anchoring state without blocking `pass`; network draining and the encrypted cache come next. Verify-on-resume against the manifest. Confirm Seal revocation/rotation semantics here.
 
 **Phase 4 — MCP + renderer**
 `baton-mcp` server exposing `baton_pass/resume/verify/log/search`. The local CLI already renders per-tool resume prompts, projects CLAUDE.md / AGENTS.md / .cursorrules, and cross-examines claims with `baton verify`; this phase exposes those same primitives as MCP tools so receiving models can invoke them directly.

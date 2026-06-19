@@ -170,6 +170,7 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 | `baton show <id>` | Print a verified baton (short ids ok). |
 | `baton resume [id] [--tool <id>]` | Render the resume prompt for a baton (head if omitted). |
 | `baton verify <claim-id> [id]` | Verify and print the sealed source lines behind a decision or graveyard entry. |
+| `baton queue status` | Show crash-safe progress for batons waiting to be published remotely. |
 | `baton render <claude-md\|agents-md\|cursorrules> [id] [--write]` | Project a baton into a per-tool rules file. |
 | `baton install` / `uninstall` | Add or remove the Claude Code checkpoint hook. |
 | `baton doctor` | Diagnose the install and verify local batons. |

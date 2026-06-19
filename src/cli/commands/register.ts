@@ -1,5 +1,5 @@
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
-import { loadIdentity, requireEd25519Identity } from "../../chain/identity.ts";
+import { loadIdentity } from "../../chain/identity.ts";
 import {
   BATON_CORE_TESTNET_PACKAGE,
   BATON_CORE_TESTNET_ORIGINAL_PACKAGE,
@@ -60,7 +60,7 @@ export async function runRegister(cwd: string, options: RegisterOptions = {}): P
         inviteToken: options.inviteToken!,
         packageId,
         projectId: config.projectId,
-        userKeypair: requireEd25519Identity(loaded).keypair,
+        identity: loaded,
       })
     : await registerProjectOnSui({
         client,

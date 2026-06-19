@@ -3,6 +3,9 @@ import { ProjectStore } from "../../store/project.ts";
 import { encryptQueuedJob } from "../../chain/payloads.ts";
 import { createSealPayloadEncryptor } from "../../chain/seal.ts";
 import { BatonError } from "../../core/errors.ts";
+import { loadIdentity } from "../../chain/identity.ts";
+import { createWalrusUploader } from "../../chain/walrus.ts";
+import { uploadQueuedJob } from "../../chain/upload.ts";
 import { ok, warn } from "../output.ts";
 
 export function runQueueStatus(cwd: string): void {
@@ -51,4 +54,36 @@ export async function runQueueEncrypt(cwd: string): Promise<void> {
   if (failed > 0) {
     throw new BatonError("IO_ERROR", `${failed} publication job(s) could not be encrypted`);
   }
+}
+
+export async function runQueueUpload(cwd: string, identityPath?: string): Promise<void> {
+  const store = ProjectStore.open(cwd);
+  const remote = store.config().remote;
+  if (!remote) {
+    throw new BatonError("INVALID_STATE", "project is local-only — run `baton login` then `baton register`");
+  }
+  const { keypair } = loadIdentity(identityPath);
+  const uploader = createWalrusUploader({ remote, keypair });
+  const jobs = store.listUploadJobs();
+  const unencrypted = jobs.filter((job) => job.blobs.some((blob) => blob.status === "pending"));
+  if (unencrypted.length > 0) {
+    throw new BatonError("INVALID_STATE", `${unencrypted.length} queued baton(s) still need \`baton queue encrypt\``);
+  }
+  const pending = jobs.filter((job) => job.blobs.some((blob) => blob.status === "encrypted"));
+  if (pending.length === 0) {
+    ok("all encrypted payloads are already certified on Walrus");
+    return;
+  }
+
+  let failed = 0;
+  for (const queued of pending) {
+    const job = await uploadQueuedJob(store, queued.handoffId, uploader);
+    if (job.status === "failed") {
+      failed += 1;
+      warn(`${queued.handoffId.slice(0, 12)} upload failed: ${job.lastError}`);
+    } else {
+      ok(`${queued.handoffId.slice(0, 12)} certified on Walrus (${job.blobs.length} blob(s))`);
+    }
+  }
+  if (failed > 0) throw new BatonError("IO_ERROR", `${failed} publication job(s) could not be uploaded`);
 }

@@ -3,7 +3,7 @@ import { ProjectStore } from "../../store/project.ts";
 import { encryptQueuedJob } from "../../chain/payloads.ts";
 import { createSealPayloadEncryptor } from "../../chain/seal.ts";
 import { BatonError } from "../../core/errors.ts";
-import { loadIdentity } from "../../chain/identity.ts";
+import { loadIdentity, requireEd25519Identity } from "../../chain/identity.ts";
 import { createWalrusUploader } from "../../chain/walrus.ts";
 import { uploadQueuedJob } from "../../chain/upload.ts";
 import { anchorQueuedJob } from "../../chain/anchor.ts";
@@ -64,7 +64,8 @@ export async function runQueueUpload(cwd: string, identityPath?: string): Promis
   if (!remote) {
     throw new BatonError("INVALID_STATE", "project is local-only — run `baton login` then `baton register`");
   }
-  const { keypair } = loadIdentity(identityPath);
+  const loaded = loadIdentity(identityPath);
+  const { keypair } = requireEd25519Identity(loaded);
   const uploader = createWalrusUploader({ remote, keypair });
   const jobs = store.listUploadJobs();
   const unencrypted = jobs.filter((job) => job.blobs.some((blob) => blob.status === "pending"));
@@ -96,7 +97,8 @@ export async function runQueueAnchor(cwd: string, identityPath?: string): Promis
   if (!remote) {
     throw new BatonError("INVALID_STATE", "project is local-only — run `baton login` then `baton register`");
   }
-  const { keypair } = loadIdentity(identityPath);
+  const loaded = loadIdentity(identityPath);
+  const { keypair } = requireEd25519Identity(loaded);
   const client = new SuiJsonRpcClient({ network: remote.network, url: remote.rpcUrl });
   const jobs = store.listUploadJobs();
   const notUploaded = jobs.filter((job) => job.blobs.some((blob) => blob.status !== "uploaded"));

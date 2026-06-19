@@ -4,6 +4,10 @@
   "description": "Git for agent memory — verifiable handoffs between coding agents, on Sui + Walrus + Seal",
   "type": "module",
   "license": "Apache-2.0",
+  "files": [
+    "src",
+    "README.md"
+  ],
   "engines": {
     "node": ">=22.18"
   },

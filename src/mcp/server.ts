@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { projectStatus } from "../core/status.ts";
 import { ProjectStore } from "../store/project.ts";
+import { registerReadTools } from "./read-tools.ts";
 
 const StatusOutput = {
   projectId: z.string(),
@@ -36,6 +37,8 @@ export function createBatonMcpServer(projectDir: string): McpServer {
       structuredContent,
     };
   });
+
+  registerReadTools(server, projectDir);
 
   return server;
 }

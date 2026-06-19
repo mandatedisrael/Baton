@@ -150,7 +150,14 @@ For repository development:
 
 ```sh
 npm install
+npm run build
 npm test
+```
+
+To run the CLI directly during development (uses native TS stripping):
+
+```sh
+npm run baton -- init
 ```
 
 Then, in a project directory:

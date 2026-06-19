@@ -1,6 +1,10 @@
 import type { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
+import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { BatonError } from "../core/errors.ts";
+import type { LoadedIdentity } from "./identity.ts";
 import type { RegistrationResult } from "./registration.ts";
+import { signTransactionWithZkLogin } from "./zklogin.ts";
+import { getEd25519Keypair } from "./identity.ts";
 import { verifySponsoredRegistrationEnvelope, type SponsoredRegistrationEnvelope } from "./sponsorship.ts";
 
 export function validateSponsorUrl(value: string): string {

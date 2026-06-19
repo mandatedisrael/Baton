@@ -1,7 +1,7 @@
 # BATON — Build Plan
 ### The verifiable handoff & memory protocol for coding agents, on Sui + Walrus + Seal
 
-**Status:** Foundation (phase 1 of 6). Local-only: schema, content addressing, working state, store, CLI. No chain, no distiller yet.
+**Status:** Phases 1–2 complete. The local engine now includes transcript capture, micro-checkpoint distillation, durable scrubbed source attachments, fidelity grading, review/resume rendering, and claim verification. Phase 3 (Seal + Walrus + Sui) is next.
 
 > **Implementation note (kept in sync with the code):** the foundation hashes canonical JSON with **SHA-256** (a Node built-in — preserves the zero-runtime-dependency rule), not BLAKE3. The algorithm is recorded alongside every hash, so a future move to BLAKE3 is a *tagged migration*, not a flag day. The runtime is **Node ≥ 22.18** (native TypeScript execution).
 
@@ -64,14 +64,14 @@ Two things (the core architectural distinction):
 - `repo_map`: files touched / files that matter / entry points (paths + content hashes)
 - `next_actions[]`: ordered, concrete
 - `env_notes`: versions, quirks, setup landmines
-- `attachments[]`: Walrus blob refs — **raw transcript (always, in transcript-mode)**, large diffs, plan files; lazy-loaded
+- `attachments[]`: content-addressed source metadata — **full scrubbed transcript (always, in transcript-mode)**, large diffs, plan files; lazy-loaded
 - `verbatim_rules`: content destined for CLAUDE.md / AGENTS.md rendering
 - `fidelity`: score (0–1), grader model id, grading rubric version, per-section confidence
 - `schema_version`
 
 > *Wire-format note:* the implemented canonical JSON uses **camelCase** field names (`projectId`, `parents`, `repoMap`, `nextActions`, `captureMode`, `verbatimRules`, `schemaVersion`). Because the document is content-addressed and shared cross-tool, this casing is a permanent, byte-significant decision — every writer must agree. The snake_case names above are the conceptual field list; the code (`src/schema/handoff.ts`) is the normative wire format.
 
-Two-tier truth: the **distilled handoff** (~2–8 KB) is what gets injected — cheap tokens, instant resumes. The **raw source** travels alongside as an encrypted attachment and every claim cites spans of it. We never throw away the source. (Mem0 structurally cannot do this; their economics assume raw context is discarded. MemWal stores memories but has no source/citation model — there is no "source" behind a fact. Ours assumes the source is sealed — Walrus makes keeping it affordable.)
+Two-tier truth: the **distilled handoff** (~2–8 KB) is what gets injected — cheap tokens, instant resumes. The **full source** is secrets-scrubbed before it travels alongside as an attachment, and every claim cites spans of it. We never throw away the evidence behind a claim. (Mem0 structurally cannot do this; their economics assume raw context is discarded. MemWal stores memories but has no source/citation model — there is no "source" behind a fact. Ours assumes the source is sealed — Walrus makes keeping it affordable.)
 
 ### 2.2 On-chain objects (Move)
 - **ProjectMemory** (shared): root. Project metadata, head handoff per branch, member capability registry, Seal policy id.
@@ -152,19 +152,19 @@ Ada joins the project: `baton share ada --read` → her agents resume with full 
 
 ---
 ## 6. Roadmap — six phases
-The build proceeds in six phases; each is shippable and dogfoodable on its own. Phase 1 is local-only and complete-in-progress; later phases layer chain, storage, and integrations on top without touching the pure core.
+The build proceeds in six phases; each is shippable and dogfoodable on its own. Phases 1 and 2 form the completed local engine; later phases layer chain, storage, and integrations on top without weakening the pure core.
 
-**Phase 1 — Foundation** *(here)*
+**Phase 1 — Foundation** *(done)*
 Handoff schema v1 + strict validator (the wire format). Canonical JSON + SHA-256 content addressing. WorkingState + checkpoint patch ops (ADD/UPDATE/GRAVEYARD/NOOP). Local store (`.baton/`) with atomic writes and verify-on-read. Six-command CLI skeleton (init/status/pass/log/show/doctor). Zero runtime dependencies.
 
-**Phase 2 — Distiller**
-Capture adapters (Claude Code hooks → transcripts; verify the Codex equivalent in practice). The micro-checkpoint loop: event hooks → delta extraction → WorkingState patch ops. Pass-as-commit finalization. Secrets scrubber. Fidelity grader + rubric v1. Review-gate UX. Dialect renderer + resume prompts. Deterministic fallback last. **Dogfood from the start: build BATON using BATON.** Tracked metrics: graveyard recall (does the handoff contain what actually failed?) and fidelity-score distribution.
+**Phase 2 — Distiller** *(done for Claude Code; Codex/Cursor adapters remain integration work)*
+Claude Code hooks → transcripts. The micro-checkpoint loop: event hooks → delta extraction → WorkingState patch ops. Pass-as-commit finalization. Secrets scrubber over the distillate and source. Durable content-addressed attachments. Fidelity grader + rubric v1. Review-gate UX. Dialect renderer + resume prompts. Deterministic fallback and `baton verify` cross-examination. **Dogfood from the start: build BATON using BATON.** Tracked metrics: graveyard recall (does the handoff contain what actually failed?) and fidelity-score distribution.
 
 **Phase 3 — Chain & storage**
 Move package (`baton_core`) on testnet: ProjectMemory, HandoffManifest, AccessCap, ToolAttestation. Walrus blob storage via the TS SDK. Seal client-side encryption + policy. Async upload queue (`pass` never blocks on network) + local encrypted cache. Verify-on-resume against the manifest. Confirm Seal revocation/rotation semantics here.
 
 **Phase 4 — MCP + renderer**
-`baton-mcp` server exposing `baton_pass/resume/verify/log/search`. Per-tool resume prompts. CLAUDE.md / AGENTS.md / .cursorrules rendering. Cross-examination (`baton_verify`) so the receiving model can check any claim against its cited span before acting.
+`baton-mcp` server exposing `baton_pass/resume/verify/log/search`. The local CLI already renders per-tool resume prompts, projects CLAUDE.md / AGENTS.md / .cursorrules, and cross-examines claims with `baton verify`; this phase exposes those same primitives as MCP tools so receiving models can invoke them directly.
 
 **Phase 5 — Identity & sharing**
 zkLogin onboarding (GitHub) + raw-keypair mode for CI/headless. AccessCap share/revoke with real Seal policy rotation. Sponsored gas (gas station) so users never buy SUI to try it. Multi-user testing of Journey C.

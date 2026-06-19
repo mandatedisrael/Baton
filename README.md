@@ -30,7 +30,7 @@ A handoff is a small, structured document — typically a few kilobytes — capt
 | `nextActions[]` | Ordered, concrete next steps. |
 | `envNotes[]` | Versions, quirks, setup landmines. |
 | `verbatimRules[]` | Project rules destined for `CLAUDE.md` / `AGENTS.md` / `.cursorrules`. |
-| `attachments[]` | The raw source (e.g. the full transcript) the distillation was drawn from. |
+| `attachments[]` | The full, secrets-scrubbed source the distillation was drawn from. |
 | `fidelity` | How faithful the distillation is to its source (0–1) — or `null` until graded. |
 | `meta` | Project, branch, tool, capture mode, model, author, timestamp, and **parent baton ids** (the lineage DAG). |
 
@@ -39,7 +39,7 @@ A handoff is a small, structured document — typically a few kilobytes — capt
 A baton keeps two layers, and never throws either away:
 
 - **The distilled handoff** — small, cheap to inject, what a resuming agent actually reads.
-- **The sealed source** — the raw transcript it was distilled from, travelling alongside as an attachment, with every distilled claim citing the exact line span it came from.
+- **The sealed source** — the full transcript it was distilled from, scrubbed before storage and travelling alongside as a content-addressed attachment. Every distilled claim cites the exact line span it came from.
 
 So fidelity is always *recoverable*: if a summary is ever in doubt, the receiving agent can cross-examine it against the ground truth. Most systems extract context and discard the source; Baton seals the source and measures how well the summary matches it.
 
@@ -93,7 +93,7 @@ src/
 - **Schema** is the contract every part agrees on — a strict validator that *rejects* unknown keys rather than stripping them, because a content-addressed document must contain exactly what gets hashed.
 - **Core** is pure functions: `canonicalize` → bytes, `hash` → identity, `applyPatch`/`finalize` → state transitions. No IO, no clock beyond what callers pass in. This is what makes verification deterministic across machines.
 - **The distiller** turns raw sessions into batons. It runs extraction and grading on *your own* model (via a provider-agnostic client), so your code and context never leave your account just to be summarized.
-- **The store** persists batons under `.baton/` (mirroring git's shape) with atomic writes and verify-on-read.
+- **The store** persists batons and their source attachments under `.baton/` (mirroring git's shape) with atomic writes and verify-on-read.
 - **Renderers and the CLI** are thin; the same engine backs an MCP server so any MCP-compatible tool drives identical logic.
 
 **Built on Sui + Walrus + Seal.** Beyond the local engine, a baton's content lives encrypted on **Walrus** (decentralized blob storage), its hashes, lineage, and fidelity attestations are anchored on **Sui**, and **Seal** provides client-side, policy-based encryption with revocable, capability-based sharing. *Today the engine runs fully locally — content-addressed and verifiable on your machine — which is the same trust primitive the networked layers extend.*
@@ -130,7 +130,7 @@ Different tools expose different ground truth, so Baton has one protocol with se
 - **Content-addressed.** Verification anywhere is "recompute and compare."
 - **Verify on every read.** A hash mismatch is a loud failure, never silent.
 - **Pure core.** State transitions are pure functions; IO lives only in the store and CLI. Everything else plugs in without touching them.
-- **Two-tier truth.** The distilled handoff is injected; the raw source travels alongside, sealed and cited. We never throw away the source.
+- **Two-tier truth.** The distilled handoff is injected; the full source travels alongside, secrets-scrubbed, sealed, and cited. We never throw away the evidence behind a claim.
 - **Honest fields.** `fidelity.score` is `null` until graded; `captureMode: "fallback"` says so when capture was degraded. No fake confidence.
 - **No blockchain-speak in the UX.** You see batons, projects, and verification — never blobs or epochs.
 - **Zero runtime dependencies in the core.** Node built-ins only. Validation is strict: unknown keys are rejected, because a content-addressed document must contain exactly what gets hashed.
@@ -169,6 +169,7 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 | `baton log` | List batons, newest first (`*` marks the head). |
 | `baton show <id>` | Print a verified baton (short ids ok). |
 | `baton resume [id] [--tool <id>]` | Render the resume prompt for a baton (head if omitted). |
+| `baton verify <claim-id> [id]` | Verify and print the sealed source lines behind a decision or graveyard entry. |
 | `baton render <claude-md\|agents-md\|cursorrules> [id] [--write]` | Project a baton into a per-tool rules file. |
 | `baton install` / `uninstall` | Add or remove the Claude Code checkpoint hook. |
 | `baton doctor` | Diagnose the install and verify local batons. |

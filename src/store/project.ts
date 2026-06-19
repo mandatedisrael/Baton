@@ -122,6 +122,14 @@ export class ProjectStore {
     this.writeConfig(config);
   }
 
+  joinRemoteProject(projectId: string, head: string, remote: RemoteProjectConfig): void {
+    const config = this.config();
+    if (config.remote || config.head || this.listHandoffIds().length > 0 || this.listUploadJobs().length > 0) {
+      throw new BatonError("INVALID_STATE", "refusing to replace a non-empty Baton project with an invitation");
+    }
+    this.writeConfig(parseProjectConfig({ ...config, projectId, head, remote }));
+  }
+
   // -- working state ----------------------------------------------------------
 
   loadWorkingState(): WorkingState {

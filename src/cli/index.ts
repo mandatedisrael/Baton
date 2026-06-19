@@ -24,6 +24,9 @@ import { runFaucet } from "./commands/faucet.ts";
 import { runPublish } from "./commands/publish.ts";
 import { runFundStorage } from "./commands/fund-storage.ts";
 import { runFetch } from "./commands/fetch.ts";
+import { runShare } from "./commands/share.ts";
+import { runRevoke } from "./commands/revoke.ts";
+import { runAccept } from "./commands/accept.ts";
 import { TOOL_IDS, type ToolId } from "../schema/handoff.ts";
 import { RULES_TARGETS, type RulesFormat } from "../render/rules.ts";
 
@@ -39,6 +42,9 @@ Commands:
   register     register this project on Sui Testnet
   publish      encrypt, store, and anchor every queued baton
   fetch <id>   recover and verify a full baton from Sui, Walrus, and Seal
+  share <address> grant read access and write a recipient invitation
+  accept <file> verify and join a shared project from an invitation
+  revoke <address> revoke delegated read access immediately
   status       show the current working state
   pass         seal the current working state into a handoff (commit)
   log          list handoffs, newest first (* = head)
@@ -64,6 +70,7 @@ Options:
   --write           (render) upsert the rules file instead of printing to stdout
   --package <id>    (register) override the canonical Baton package
   --rpc <url>       (register) override the Testnet RPC endpoint
+  --out <file>      (share) invitation output path
   --amount <mist>   (fund-storage) SUI MIST to exchange (default 100000000)
 `;
 
@@ -131,6 +138,38 @@ function main(argv: string[]): void {
         return;
       }
       void runFetch(process.cwd(), id).catch(die);
+      return;
+    }
+    case "share": {
+      const grantee = rest[0];
+      const outFlag = rest.indexOf("--out");
+      const outputPath = outFlag === -1 ? undefined : rest[outFlag + 1];
+      if (!grantee || (outFlag !== -1 && !outputPath) || rest.some((arg, i) => i > 0 && i !== outFlag && i !== outFlag + 1)) {
+        process.stderr.write("usage: baton share <address> [--out <file>]\n");
+        process.exitCode = 2;
+        return;
+      }
+      void runShare(process.cwd(), grantee, outputPath).catch(die);
+      return;
+    }
+    case "accept": {
+      const path = rest[0];
+      if (!path || rest.length !== 1) {
+        process.stderr.write("usage: baton accept <invitation-file>\n");
+        process.exitCode = 2;
+        return;
+      }
+      void runAccept(process.cwd(), path).catch(die);
+      return;
+    }
+    case "revoke": {
+      const grantee = rest[0];
+      if (!grantee || rest.length !== 1) {
+        process.stderr.write("usage: baton revoke <address>\n");
+        process.exitCode = 2;
+        return;
+      }
+      void runRevoke(process.cwd(), grantee).catch(die);
       return;
     }
     case "checkpoint":

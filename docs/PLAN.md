@@ -1,7 +1,7 @@
 # BATON — Build Plan
 ### The verifiable handoff & memory protocol for coding agents, on Sui + Walrus + Seal
 
-**Status:** Phases 1–2 complete. Phase 3 is in progress: `baton_core` is deployed on Sui Testnet; real users can create protected Ed25519 identities, fund them, register projects, and encrypt verified queued payloads through Seal. Walrus transport, manifest anchoring, and remote decryption are next.
+**Status:** Phases 1–2 complete. Phase 3 is in progress: `baton_core` is deployed on Sui Testnet; real users can create protected Ed25519 identities, acquire SUI and WAL, register projects, encrypt verified payloads through Seal, publish them to Walrus, and anchor manifests on Sui. Remote retrieval/decryption and verify-on-resume are next.
 
 > **Implementation note (kept in sync with the code):** the foundation hashes canonical JSON with **SHA-256** (a Node built-in — preserves the zero-runtime-dependency rule), not BLAKE3. The algorithm is recorded alongside every hash, so a future move to BLAKE3 is a *tagged migration*, not a flag day. The runtime is **Node ≥ 22.18** (native TypeScript execution).
 
@@ -160,8 +160,8 @@ Handoff schema v1 + strict validator (the wire format). Canonical JSON + SHA-256
 **Phase 2 — Distiller** *(done for Claude Code; Codex/Cursor adapters remain integration work)*
 Claude Code hooks → transcripts. The micro-checkpoint loop: event hooks → delta extraction → WorkingState patch ops. Pass-as-commit finalization. Secrets scrubber over the distillate and source. Durable content-addressed attachments. Fidelity grader + rubric v1. Review-gate UX. Dialect renderer + resume prompts. Deterministic fallback and `baton verify` cross-examination. **Dogfood from the start: build BATON using BATON.** Tracked metrics: graveyard recall (does the handoff contain what actually failed?) and fidelity-score distribution.
 
-**Phase 3 — Chain & storage** *(in progress: contract, identity, registration, queue, and Seal encryption live on Testnet)*
-The deployed Move package provides `ProjectMemory`, owner capabilities, branch-aware `HandoffManifest` dynamic fields, bounded metadata, ownership transfer, and a project-scoped `seal_approve` policy. The CLI generates real Ed25519 identities, registers shared project objects, and encrypts canonical handoffs and attachments through Mysten's verified decentralized Testnet Seal committee. The local queue checkpoints and verifies every ciphertext without blocking `pass`. Walrus upload, on-chain manifest anchoring from the queue, and remote verify/decrypt come next; sharing capabilities and rotation remain Phase 5.
+**Phase 3 — Chain & storage** *(in progress: write path live on Testnet; read/decrypt path next)*
+The deployed Move package provides `ProjectMemory`, owner capabilities, branch-aware `HandoffManifest` dynamic fields, bounded metadata, ownership transfer, and a project-scoped `seal_approve` policy. The CLI generates real Ed25519 identities, acquires official Testnet WAL, registers shared project objects, encrypts canonical handoffs and attachments through Seal, persists every recoverable Walrus SDK checkpoint, certifies blobs, and anchors their manifests on Sui. Publication is independently resumable at encryption, registration, upload, certification, and anchoring boundaries; interrupted anchors are verified on-chain before retrying. Remote retrieval/decryption and verify-on-resume come next; sharing capabilities and rotation remain Phase 5.
 
 **Phase 4 — MCP + renderer**
 `baton-mcp` server exposing `baton_pass/resume/verify/log/search`. The local CLI already renders per-tool resume prompts, projects CLAUDE.md / AGENTS.md / .cursorrules, and cross-examines claims with `baton verify`; this phase exposes those same primitives as MCP tools so receiving models can invoke them directly.

@@ -152,10 +152,12 @@ Then, in a project directory:
 baton init           # set up .baton/ and auto-wire the Claude Code hook
 baton login          # create/load your protected Sui identity
 baton faucet         # fund it on Testnet (subject to faucet rate limits)
+baton fund-storage   # exchange Testnet SUI for WAL storage funds
 baton register       # create this project's on-chain memory object
 # …just work in your agent — checkpoints accrue automatically…
 baton pass           # seal the working state into a baton
 baton queue encrypt  # encrypt queued payloads through Seal
+baton publish        # encrypt, upload to Walrus, and anchor on Sui
 baton resume         # render the resume prompt for the next agent
 ```
 
@@ -170,7 +172,9 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 | `baton init [--no-hooks]` | Initialize a project and register the Claude Code checkpoint hook. |
 | `baton login` | Create or load the protected Ed25519 identity in `~/.baton/identity.json`. |
 | `baton faucet` | Request SUI for that identity from the official Testnet faucet. |
+| `baton fund-storage [--amount <mist>]` | Exchange Testnet SUI for WAL through the official Walrus exchange. |
 | `baton register [--package <id>] [--rpc <url>]` | Register the project against the canonical Testnet package. |
+| `baton publish` | Resume every queued baton through Seal encryption, Walrus certification, and Sui anchoring. |
 | `baton status` | Show the current working state. |
 | `baton pass` | Seal the working state into a baton (commit). |
 | `baton log` | List batons, newest first (`*` marks the head). |
@@ -179,6 +183,8 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 | `baton verify <claim-id> [id]` | Verify and print the sealed source lines behind a decision or graveyard entry. |
 | `baton queue status` | Show crash-safe progress for batons waiting to be published remotely. |
 | `baton queue encrypt` | Encrypt pending canonical handoffs and attachments through Seal. |
+| `baton queue upload` | Resume encrypted payloads through Walrus registration, upload, and certification. |
+| `baton queue anchor` | Anchor certified Walrus blob references in the project's Sui manifest. |
 | `baton render <claude-md\|agents-md\|cursorrules> [id] [--write]` | Project a baton into a per-tool rules file. |
 | `baton install` / `uninstall` | Add or remove the Claude Code checkpoint hook. |
 | `baton doctor` | Diagnose the install and verify local batons. |
@@ -194,7 +200,7 @@ Handoffs are clearly the primitive every agent vendor wants — Cursor and Codex
 
 Baton is the handoff layer **nobody owns but you**: encrypted client-side, stored on neutral infrastructure, verifiable on-chain, shareable and revocable.
 
-The Move package and registration/encryption flow are deployed and verified on Testnet; exact object and transaction evidence lives in [docs/deployments.md](docs/deployments.md). Walrus upload, manifest anchoring, and remote decryption are still in progress, so Baton does not yet claim Mainnet readiness.
+The Move package and full publication flow are deployed and verified on Testnet: Seal encryption, resumable Walrus storage, and Sui manifest anchoring all run against live infrastructure. Exact object, blob, hash, and transaction evidence lives in [docs/deployments.md](docs/deployments.md). Remote decryption and sharing/revocation UX are still in progress, so Baton does not yet claim Mainnet readiness.
 
 ---
 

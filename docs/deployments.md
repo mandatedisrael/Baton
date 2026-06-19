@@ -32,4 +32,23 @@ The shared object was read back from Testnet and verified as `baton_core::memory
 
 The registered project passed a local baton and ran `baton queue encrypt` against Mysten's verified decentralized Testnet Seal committee. Seal returned a real encrypted object; Baton persisted it, re-hashed it, and reported the queue as `1 encrypted · 0/1 uploaded`.
 
-This verifies the path through project registration and client-side Seal encryption. Walrus upload, Sui manifest anchoring, and remote decryption are separate milestones and are not claimed here.
+This first run verified project registration and client-side Seal encryption. The separate publication run below verifies Walrus upload and Sui manifest anchoring; remote decryption is not yet claimed.
+
+## End-to-end publication evidence
+
+On 2026-06-19, a second clean temporary project ran the public CLI path `init → register → pass → publish` with a newly sealed baton and the protected Baton identity.
+
+| Item | Value |
+|---|---|
+| Storage funding transaction | `AEZJA7tV9PoJanKksmmvPrLY4ga6vQ342c3Na2uogN8X` |
+| `ProjectMemory` | `0xa0dd123b2ec564d7502688f751f360e9ef3f7d18f4cd73a6e671afdf3c0acaa4` |
+| Registration transaction | `Axxt1gc3SiTev9Xo7owJgknmbGSs32tyytEKpf8cKmx4` |
+| Baton content hash | `63d1d21152a2280cff510906dd9ffeadc6dae64ad99eef4f40979ed8ec8d4e76` |
+| Walrus blob ID | `IxAzdh40gIAqQB8g9_DG7eT6dQcLjHIUXykzIvUoYFM` |
+| Encrypted blob SHA-256 | `b0f74583784fc0ff3357d4f906e659bec0e0da9b2dbe228ac33d3895e9f5d303` |
+| Walrus registration transaction | `HV5w4pnNN46r9yC1etgoK7w1e3n7PQtFcraVp5UVVPGQ` |
+| Manifest anchor transaction | `Do3uUJfLgEjNpB9mTvjsjikQxCGQfnVhWts4TzRZ55fv` |
+
+The ciphertext was subsequently fetched from the public Testnet Walrus aggregator and independently hashed to the recorded encrypted SHA-256 value. The `HandoffManifest` dynamic field was then fetched from Sui and verified to contain the same baton hash and Walrus blob ID; its `previousTransaction` matched the recorded anchor transaction.
+
+This proves the production write path through official Testnet contracts and services. Remote Seal decryption and sharing/revocation UX remain future milestones and are not claimed here.

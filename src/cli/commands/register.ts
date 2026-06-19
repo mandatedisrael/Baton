@@ -1,5 +1,5 @@
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
-import { loadIdentity } from "../../chain/identity.ts";
+import { loadIdentity, requireEd25519Identity } from "../../chain/identity.ts";
 import {
   BATON_CORE_TESTNET_PACKAGE,
   BATON_CORE_TESTNET_ORIGINAL_PACKAGE,
@@ -28,7 +28,7 @@ export async function runRegister(cwd: string, options: RegisterOptions = {}): P
     throw new BatonError("ALREADY_INITIALIZED", `project is already registered (${config.remote.projectObjectId})`);
   }
 
-  const { record, keypair } = loadIdentity(options.identityPath);
+  const loaded = loadIdentity(options.identityPath);
   const rpcUrl = options.rpcUrl ?? TESTNET_RPC_URL;
   const packageId = options.packageId ?? BATON_CORE_TESTNET_PACKAGE;
   const client = new SuiJsonRpcClient({ network: "testnet", url: rpcUrl });
@@ -36,17 +36,19 @@ export async function runRegister(cwd: string, options: RegisterOptions = {}): P
     throw new BatonError("INVALID_STATE", "sponsored registration requires both sponsor URL and invitation token");
   }
 
+  const idAddress = loaded.record.address;
+
   if (!options.sponsorUrl) {
     let balance;
     try {
-      balance = await client.getBalance({ owner: record.address });
+      balance = await client.getBalance({ owner: idAddress });
     } catch (err) {
       throw new BatonError("IO_ERROR", `could not reach Sui Testnet at ${rpcUrl}`, { cause: err });
     }
     if (BigInt(balance.totalBalance) === 0n) {
       throw new BatonError(
         "INVALID_STATE",
-        `Baton identity ${record.address} needs Testnet SUI — run \`baton faucet\` or use a sponsor invitation`,
+        `Baton identity ${idAddress} needs Testnet SUI — run \`baton faucet\` or use a sponsor invitation`,
       );
     }
   }
@@ -58,11 +60,11 @@ export async function runRegister(cwd: string, options: RegisterOptions = {}): P
         inviteToken: options.inviteToken!,
         packageId,
         projectId: config.projectId,
-        userKeypair: keypair,
+        userKeypair: requireEd25519Identity(loaded).keypair,
       })
     : await registerProjectOnSui({
         client,
-        keypair,
+        identity: loaded,
         packageId,
         typePackageId: packageId === BATON_CORE_TESTNET_PACKAGE ? BATON_CORE_TESTNET_ORIGINAL_PACKAGE : packageId,
         projectId: config.projectId,

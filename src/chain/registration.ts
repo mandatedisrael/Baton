@@ -3,6 +3,8 @@ import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiObjectId } from "@mysten/sui/utils";
 import { BatonError } from "../core/errors.ts";
+import { signTransactionWithZkLogin } from "./zklogin.ts";
+import type { LoadedIdentity } from "./identity.ts";
 
 export interface RegistrationResult {
   digest: string;
@@ -40,26 +42,61 @@ export function extractRegistrationObjects(
 
 export async function registerProjectOnSui(input: {
   client: SuiJsonRpcClient;
-  keypair: Ed25519Keypair;
+  keypair?: Ed25519Keypair; // legacy ED path
+  identity?: LoadedIdentity; // new unified (preferred)
   packageId: string;
   typePackageId?: string;
   projectId: string;
 }): Promise<RegistrationResult> {
   const transaction = buildRegistrationTransaction(input.packageId, input.projectId);
+
   let response;
-  try {
-    response = await input.client.signAndExecuteTransaction({
+
+  if (input.identity && input.identity.scheme === "ZKLOGIN") {
+    // Real zkLogin signing path (production)
+    const sender = input.identity.session.address;
+    transaction.setSender(sender);
+
+    const zkSig = await signTransactionWithZkLogin({
+      session: input.identity.session,
+      client: input.client,
       transaction,
-      signer: input.keypair,
-      options: { showEffects: true, showObjectChanges: true },
     });
-  } catch (err) {
-    throw new BatonError(
-      "IO_ERROR",
-      `Sui registration request failed: ${err instanceof Error ? err.message : String(err)}`,
-      { cause: err },
-    );
+
+    try {
+      const bytes = await transaction.build({ client: input.client });
+      response = await input.client.executeTransactionBlock({
+        transactionBlock: bytes,
+        signature: zkSig,
+        options: { showEffects: true, showObjectChanges: true },
+      });
+    } catch (err) {
+      throw new BatonError(
+        "IO_ERROR",
+        `Sui zkLogin registration request failed: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err },
+      );
+    }
+  } else {
+    // Legacy / ED25519 path
+    const kp = input.keypair ?? (input.identity as any)?.keypair;
+    if (!kp) throw new BatonError("INVALID_STATE", "No signer provided for registration");
+
+    try {
+      response = await input.client.signAndExecuteTransaction({
+        transaction,
+        signer: kp,
+        options: { showEffects: true, showObjectChanges: true },
+      });
+    } catch (err) {
+      throw new BatonError(
+        "IO_ERROR",
+        `Sui registration request failed: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err },
+      );
+    }
   }
+
   if (response.effects?.status.status !== "success") {
     throw new BatonError(
       "IO_ERROR",

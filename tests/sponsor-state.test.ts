@@ -14,6 +14,7 @@ import {
   pruneSponsorInvites,
   revokeSponsorInvite,
   saveSponsorReservation,
+  sponsorUsageSnapshot,
   type SponsorReservation,
   withSponsorStateLock,
 } from "../src/sponsor/state.ts";
@@ -132,4 +133,22 @@ test("operators can revoke and prune unused invitations without deleting audit r
   assert.equal(pruneSponsorInvites(path, now), 1);
   assert.deepEqual(listSponsorInvites(path, now).map((invite) => invite.status), ["used"]);
   assert.throws(() => revokeSponsorInvite(path, used.id, now), /used sponsor invitation cannot be revoked/);
+});
+
+test("usage snapshots bound daily liability and count only live reservations", () => {
+  const now = new Date("2026-06-19T12:00:00.000Z");
+  const completed = issueSponsorInviteDetails(path, now, 1);
+  saveSponsorReservation(path, completed.token, reservation(), now);
+  completeSponsorReservation(path, completed.token, "request-1", {
+    digest: "digest",
+    projectObjectId: "0xproject",
+    ownerCapId: "0xcap",
+  }, now);
+  const active = issueSponsorInviteDetails(path, now, 1);
+  saveSponsorReservation(path, active.token, { ...reservation(), requestId: "request-2" }, now);
+  assert.deepEqual(sponsorUsageSnapshot(path, now), { completedToday: 1, activeReservations: 1 });
+  assert.deepEqual(
+    sponsorUsageSnapshot(path, new Date("2026-06-20T12:11:00.000Z")),
+    { completedToday: 0, activeReservations: 0 },
+  );
 });

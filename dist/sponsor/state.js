@@ -317,6 +317,21 @@ export function listSponsorInvites(path = defaultSponsorStatePath(), now = new D
         digest: invite.reservation?.result?.digest ?? null,
     }));
 }
+export function sponsorUsageSnapshot(path = defaultSponsorStatePath(), now = new Date()) {
+    const state = readState(path);
+    const startOfDay = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    let completedToday = 0;
+    let activeReservations = 0;
+    for (const invite of state.invites) {
+        if (invite.usedAt && Date.parse(invite.usedAt) >= startOfDay)
+            completedToday += 1;
+        const reservation = invite.reservation;
+        if (!invite.revokedAt && !invite.usedAt && reservation && !reservation.result && Date.parse(reservation.expiresAt) > now.getTime()) {
+            activeReservations += 1;
+        }
+    }
+    return { completedToday, activeReservations };
+}
 export function revokeSponsorInvite(path, id, now = new Date()) {
     const state = readState(path);
     const invite = state.invites.find((entry) => entry.id === id);

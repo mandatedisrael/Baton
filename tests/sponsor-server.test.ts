@@ -103,6 +103,13 @@ test("one-use invitation sponsors only the exact user registration", async () =>
     assert.deepEqual(retry, result);
     assert.equal(executions, 1);
 
+    const ready = await fetch(`${sponsorUrl}/ready`);
+    assert.equal(ready.status, 200);
+    assert.equal((await ready.json() as { ok: boolean }).ok, true);
+    const operationalMetrics = await (await fetch(`${sponsorUrl}/metrics`)).text();
+    assert.match(operationalMetrics, /baton_sponsor_prepared_total 2/);
+    assert.match(operationalMetrics, /baton_sponsor_completed_total 2/);
+
     const other = new Ed25519Keypair();
     await assert.rejects(
       registerProjectWithSponsor({
@@ -114,6 +121,144 @@ test("one-use invitation sponsors only the exact user registration", async () =>
       }),
       /reserved for another registration/,
     );
+
+    const secondToken = issueSponsorInvite(statePath, new Date(), 1);
+    const limitedServer = createSponsorServer({
+      client: client as never,
+      sponsorKeypair: sponsor,
+      statePath,
+      policyPackageId: PACKAGE,
+      typePackageId: PACKAGE,
+      maxDailyRegistrations: 1,
+    });
+    await new Promise<void>((resolve, reject) => {
+      limitedServer.once("error", reject);
+      limitedServer.listen(0, "127.0.0.1", resolve);
+    });
+    try {
+      const limitedAddress = limitedServer.address();
+      assert(limitedAddress && typeof limitedAddress === "object");
+      await assert.rejects(
+        registerProjectWithSponsor({
+          sponsorUrl: `http://127.0.0.1:${limitedAddress.port}`,
+          inviteToken: secondToken,
+          packageId: PACKAGE,
+          projectId: "project-2",
+          userKeypair: other,
+        }),
+        /daily registration limit reached/,
+      );
+    } finally {
+      await new Promise<void>((resolve) => limitedServer.close(() => resolve()));
+    }
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test("trusted-proxy client addresses receive independent registration limits", async () => {
+  const sponsor = new Ed25519Keypair();
+  const statePath = join(root, "sponsor.json");
+  const server = createSponsorServer({
+    client: {} as never,
+    sponsorKeypair: sponsor,
+    statePath,
+    policyPackageId: PACKAGE,
+    typePackageId: PACKAGE,
+    trustProxy: true,
+    rateLimitPerMinute: 1,
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  try {
+    const address = server.address();
+    assert(address && typeof address === "object");
+    const url = `http://127.0.0.1:${address.port}/v1/register/prepare`;
+    const request = (ip: string) => fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": ip },
+      body: JSON.stringify({ token: "x".repeat(43), sender: "0x2", projectId: "project-1" }),
+    });
+    assert.equal((await request("203.0.113.10")).status, 404);
+    assert.equal((await request("203.0.113.10")).status, 429);
+    assert.equal((await request("203.0.113.11")).status, 404);
+    assert.equal((await fetch(`http://127.0.0.1:${address.port}/health`)).status, 200);
+    const operationalMetrics = await (await fetch(`http://127.0.0.1:${address.port}/metrics`)).text();
+    assert.match(operationalMetrics, /baton_sponsor_rate_limited_total 1/);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test("readiness fails closed when no unreserved gas coin is available", async () => {
+  const sponsor = new Ed25519Keypair();
+  const server = createSponsorServer({
+    client: {
+      async getLatestSuiSystemState() { return { epoch: "1200" }; },
+      async getCoins() { return { data: [], hasNextPage: false, nextCursor: null }; },
+    } as never,
+    sponsorKeypair: sponsor,
+    statePath: join(root, "sponsor.json"),
+    policyPackageId: PACKAGE,
+    typePackageId: PACKAGE,
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  try {
+    const address = server.address();
+    assert(address && typeof address === "object");
+    const base = `http://127.0.0.1:${address.port}`;
+    const ready = await fetch(`${base}/ready`);
+    assert.equal(ready.status, 503);
+    assert.match(await ready.text(), /no unreserved sponsor gas coin is ready/);
+    assert.match(await (await fetch(`${base}/metrics`)).text(), /baton_sponsor_readiness_failures_total 1/);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test("readiness scans paginated sponsor coins and metrics expose bounded gauges", async () => {
+  const sponsor = new Ed25519Keypair();
+  let pages = 0;
+  const server = createSponsorServer({
+    client: {
+      async getLatestSuiSystemState() { return { epoch: "1200" }; },
+      async getCoins(input: { cursor?: string | null }) {
+        pages += 1;
+        if (!input.cursor) return { data: [], hasNextPage: true, nextCursor: "page-2" };
+        return {
+          data: [{ coinObjectId: "0x99", version: "1", digest: "2E3Wu14rQZ4rqfSi8Ve1arY4HWd1wv2cZmJbdatMgv2p", balance: "100000000" }],
+          hasNextPage: false,
+          nextCursor: null,
+        };
+      },
+    } as never,
+    sponsorKeypair: sponsor,
+    statePath: join(root, "sponsor.json"),
+    policyPackageId: PACKAGE,
+    typePackageId: PACKAGE,
+    maxDailyRegistrations: 7,
+    maxActiveReservations: 3,
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  try {
+    const address = server.address();
+    assert(address && typeof address === "object");
+    const base = `http://127.0.0.1:${address.port}`;
+    assert.equal((await fetch(`${base}/ready`)).status, 200);
+    assert.equal(pages, 2);
+    const operationalMetrics = await (await fetch(`${base}/metrics`)).text();
+    assert.match(operationalMetrics, /baton_sponsor_completed_today 0/);
+    assert.match(operationalMetrics, /baton_sponsor_active_reservations 0/);
+    assert.match(operationalMetrics, /baton_sponsor_daily_limit 7/);
+    assert.match(operationalMetrics, /baton_sponsor_active_limit 3/);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }

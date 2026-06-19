@@ -131,6 +131,11 @@ export interface SponsorInviteSummary {
   digest: string | null;
 }
 
+export interface SponsorUsageSnapshot {
+  completedToday: number;
+  activeReservations: number;
+}
+
 function projectId(value: string): string {
   const bytes = new TextEncoder().encode(value);
   if (bytes.byteLength === 0 || bytes.byteLength > 128) throw new BatonError("INVALID_STATE", "project id must encode to 1–128 UTF-8 bytes");
@@ -358,6 +363,21 @@ export function listSponsorInvites(path = defaultSponsorStatePath(), now = new D
     requestId: invite.reservation?.requestId ?? null,
     digest: invite.reservation?.result?.digest ?? null,
   }));
+}
+
+export function sponsorUsageSnapshot(path = defaultSponsorStatePath(), now = new Date()): SponsorUsageSnapshot {
+  const state = readState(path);
+  const startOfDay = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  let completedToday = 0;
+  let activeReservations = 0;
+  for (const invite of state.invites) {
+    if (invite.usedAt && Date.parse(invite.usedAt) >= startOfDay) completedToday += 1;
+    const reservation = invite.reservation;
+    if (!invite.revokedAt && !invite.usedAt && reservation && !reservation.result && Date.parse(reservation.expiresAt) > now.getTime()) {
+      activeReservations += 1;
+    }
+  }
+  return { completedToday, activeReservations };
 }
 
 export function revokeSponsorInvite(path: string, id: string, now = new Date()): void {

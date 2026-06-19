@@ -14,6 +14,7 @@ Usage:
   baton-sponsor revoke --id <invite-id> [--state <file>]
   baton-sponsor prune [--state <file>]
   baton-sponsor serve [--state <file>] [--identity <file>] [--port <port>]
+    [--trust-proxy] [--rate-limit <per-minute>] [--daily-limit <count>] [--max-active <count>]
 
 The HTTP service binds to 127.0.0.1 only. Put a TLS reverse proxy in front of
 it for remote users; invitation tokens must never cross plaintext networks.
@@ -26,6 +27,13 @@ function flag(args, name) {
     if (!value || value.startsWith("--"))
         throw new BatonError("INVALID_STATE", `${name} requires a value`);
     return value;
+}
+function positiveIntegerFlag(args, name, envName, fallback) {
+    const raw = flag(args, name) ?? process.env[envName] ?? String(fallback);
+    if (!/^\d+$/.test(raw) || Number(raw) < 1 || !Number.isSafeInteger(Number(raw))) {
+        throw new BatonError("INVALID_STATE", `${name} must be a positive integer`);
+    }
+    return Number(raw);
 }
 async function main() {
     const [command, ...args] = process.argv.slice(2);
@@ -92,6 +100,10 @@ async function main() {
         statePath,
         policyPackageId: BATON_CORE_TESTNET_PACKAGE,
         typePackageId: BATON_CORE_TESTNET_ORIGINAL_PACKAGE,
+        trustProxy: args.includes("--trust-proxy") || process.env.BATON_SPONSOR_TRUST_PROXY === "1",
+        rateLimitPerMinute: positiveIntegerFlag(args, "--rate-limit", "BATON_SPONSOR_RATE_LIMIT", 30),
+        maxDailyRegistrations: positiveIntegerFlag(args, "--daily-limit", "BATON_SPONSOR_DAILY_LIMIT", 100),
+        maxActiveReservations: positiveIntegerFlag(args, "--max-active", "BATON_SPONSOR_MAX_ACTIVE", 10),
     });
     const port = Number(rawPort);
     await new Promise((resolve, reject) => {

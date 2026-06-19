@@ -142,7 +142,7 @@ Different tools expose different ground truth, so Baton has one protocol with se
 Requires **Node ≥ 22.18** (runs TypeScript natively). The pure core has zero runtime dependencies; network adapters use the official Mysten SDKs.
 
 ```sh
-npm install -g https://github.com/mandatedisrael/Baton/releases/download/v0.3.0/baton-0.3.0.tgz
+npm install -g https://github.com/mandatedisrael/Baton/releases/download/v0.4.0/baton-0.4.0.tgz
 baton --version
 ```
 
@@ -229,7 +229,7 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 Install Baton globally, then point any stdio-compatible MCP client at the project it may access:
 
 ```sh
-npm install -g https://github.com/mandatedisrael/Baton/releases/download/v0.3.0/baton-0.3.0.tgz
+npm install -g https://github.com/mandatedisrael/Baton/releases/download/v0.4.0/baton-0.4.0.tgz
 baton-mcp --project /absolute/path/to/project
 ```
 

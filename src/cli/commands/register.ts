@@ -53,7 +53,7 @@ export async function runRegister(cwd: string, options: RegisterOptions = {}): P
     rpcUrl,
     packageId,
     projectObjectId: result.projectObjectId,
-    ownerCapId: result.ownerCapId,
+    authority: { kind: "owner", capId: result.ownerCapId },
     registrationTx: result.digest,
     registeredAt,
     seal: TESTNET_SEAL,

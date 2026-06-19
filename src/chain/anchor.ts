@@ -43,6 +43,9 @@ export function buildAnchorTransaction(input: {
   handoff: Handoff;
   job: UploadJob;
 }): Transaction {
+  if (input.remote.authority.kind !== "owner") {
+    throw new BatonError("INVALID_STATE", "delegated readers cannot anchor handoffs");
+  }
   if (hashCanonical(input.handoff) !== input.handoffId || input.job.handoffId !== input.handoffId) {
     throw new BatonError("HASH_MISMATCH", "handoff, queue, and anchor identity do not match");
   }
@@ -71,7 +74,7 @@ export function buildAnchorTransaction(input: {
     target: `${normalizeSuiObjectId(input.remote.packageId)}::memory::anchor_handoff`,
     arguments: [
       tx.object(input.remote.projectObjectId),
-      tx.object(input.remote.ownerCapId),
+      tx.object(input.remote.authority.capId),
       tx.pure.vector("u8", hashBytes(input.handoffId, "handoff id")),
       tx.pure.vector("u8", utf8(branch)),
       tx.pure.vector("u8", utf8(handoffBlob.blobId!)),

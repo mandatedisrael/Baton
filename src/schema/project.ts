@@ -9,12 +9,20 @@ export interface PublicKeyServerConfig {
   aggregatorUrl?: string;
 }
 
+export const REMOTE_AUTHORITY_KINDS = ["owner", "delegate"] as const;
+export type RemoteAuthorityKind = (typeof REMOTE_AUTHORITY_KINDS)[number];
+
+export interface RemoteAuthority {
+  kind: RemoteAuthorityKind;
+  capId: string;
+}
+
 export interface RemoteProjectConfig {
   network: SuiNetwork;
   rpcUrl: string;
   packageId: string;
   projectObjectId: string;
-  ownerCapId: string;
+  authority: RemoteAuthority;
   registrationTx: string;
   registeredAt: string;
   seal: {
@@ -75,6 +83,8 @@ function parseRemote(v: unknown, path: string): RemoteProjectConfig {
     "rpcUrl",
     "packageId",
     "projectObjectId",
+    "authority",
+    // Legacy owner-only configs migrate to `authority` on read.
     "ownerCapId",
     "registrationTx",
     "registeredAt",
@@ -82,6 +92,18 @@ function parseRemote(v: unknown, path: string): RemoteProjectConfig {
     "walrus",
   ]);
   const sealRaw = obj(r.seal, `${path}.seal`, ["threshold", "serverConfigs"]);
+  if (r.authority !== undefined && r.ownerCapId !== undefined) {
+    throw new ValidationError(`${path}.authority`, "cannot be combined with legacy ownerCapId");
+  }
+  const authority = r.authority === undefined
+    ? { kind: "owner" as const, capId: suiId(r.ownerCapId, `${path}.ownerCapId`) }
+    : (() => {
+        const raw = obj(r.authority, `${path}.authority`, ["kind", "capId"]);
+        return {
+          kind: oneOf(raw.kind, `${path}.authority.kind`, REMOTE_AUTHORITY_KINDS),
+          capId: suiId(raw.capId, `${path}.authority.capId`),
+        };
+      })();
   const serverConfigs = arr(sealRaw.serverConfigs, `${path}.seal.serverConfigs`, parseKeyServer);
   if (serverConfigs.length === 0) throw new ValidationError(`${path}.seal.serverConfigs`, "expected at least one server");
   const threshold = num(sealRaw.threshold, `${path}.seal.threshold`, { int: true, min: 1 });
@@ -117,7 +139,7 @@ function parseRemote(v: unknown, path: string): RemoteProjectConfig {
     rpcUrl: httpUrl(r.rpcUrl, `${path}.rpcUrl`),
     packageId: suiId(r.packageId, `${path}.packageId`),
     projectObjectId: suiId(r.projectObjectId, `${path}.projectObjectId`),
-    ownerCapId: suiId(r.ownerCapId, `${path}.ownerCapId`),
+    authority,
     registrationTx: str(r.registrationTx, `${path}.registrationTx`, { min: 1 }),
     registeredAt: isoDatetime(r.registeredAt, `${path}.registeredAt`),
     seal: { threshold, serverConfigs },

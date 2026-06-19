@@ -1,6 +1,7 @@
 import { BatonError } from "../core/errors.ts";
 import { hashBytes } from "../core/hash.ts";
 import type { UploadBlobKind } from "../schema/remote.ts";
+import type { RemoteAuthority } from "../schema/project.ts";
 import { sealIdentity } from "./encryption.ts";
 
 export interface RemoteBlobDescriptor {
@@ -13,7 +14,7 @@ export interface RemoteBlobDescriptor {
 export interface DecryptionRequest {
   packageId: string;
   projectObjectId: string;
-  ownerCapId: string;
+  authority: RemoteAuthority;
   handoffId: string;
   identity: string;
   data: Uint8Array;
@@ -27,7 +28,7 @@ export async function decryptBlob(input: {
   decryptor: PayloadDecryptor;
   packageId: string;
   projectObjectId: string;
-  ownerCapId: string;
+  authority: RemoteAuthority;
   handoffId: string;
   blob: RemoteBlobDescriptor;
   ciphertext: Uint8Array;
@@ -35,7 +36,7 @@ export async function decryptBlob(input: {
   const plaintext = await input.decryptor.decrypt({
     packageId: input.packageId,
     projectObjectId: input.projectObjectId,
-    ownerCapId: input.ownerCapId,
+    authority: input.authority,
     handoffId: input.handoffId,
     identity: sealIdentity(input.projectObjectId, input.handoffId),
     data: input.ciphertext,

@@ -13,7 +13,7 @@ function config() {
       rpcUrl: "https://fullnode.testnet.sui.io:443",
       packageId: "0x1234",
       projectObjectId: "0x5678",
-      ownerCapId: "0x9abc",
+      authority: { kind: "owner", capId: "0x9abc" },
       registrationTx: "transaction-digest",
       registeredAt: "2026-06-19T12:05:00.000Z",
       seal: {
@@ -47,6 +47,20 @@ test("parseProjectConfig accepts strict public registration metadata", () => {
 test("parseProjectConfig migrates pre-network config to local-only", () => {
   const { remote: _, ...legacy } = config();
   assert.equal(parseProjectConfig(legacy).remote, null);
+});
+
+test("parseProjectConfig migrates owner-only authority metadata", () => {
+  const value = config();
+  const capId = value.remote.authority.capId;
+  delete (value.remote as Partial<typeof value.remote>).authority;
+  (value.remote as typeof value.remote & { ownerCapId: string }).ownerCapId = capId;
+  assert.deepEqual(parseProjectConfig(value).remote?.authority, { kind: "owner", capId });
+});
+
+test("parseProjectConfig accepts delegated authority metadata", () => {
+  const value = config();
+  value.remote.authority.kind = "delegate";
+  assert.equal(parseProjectConfig(value).remote?.authority.kind, "delegate");
 });
 
 test("parseProjectConfig rejects unsafe URLs and invalid object ids", () => {

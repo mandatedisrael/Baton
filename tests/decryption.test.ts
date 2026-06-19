@@ -26,7 +26,7 @@ test("decryptBlob binds policy identity and verifies recovered plaintext", async
       decryptor,
       packageId: "0x1234",
       projectObjectId: "0x5678",
-      ownerCapId: "0x9abc",
+      authority: { kind: "owner", capId: "0x9abc" },
       handoffId: HANDOFF_ID,
       blob,
       ciphertext: Uint8Array.from([1, 2, 3]),
@@ -43,7 +43,7 @@ test("decryptBlob refuses plaintext that differs from the manifest hash", async 
       decryptor,
       packageId: "0x1234",
       projectObjectId: "0x5678",
-      ownerCapId: "0x9abc",
+      authority: { kind: "owner", capId: "0x9abc" },
       handoffId: HANDOFF_ID,
       blob,
       ciphertext: Uint8Array.from([1]),
@@ -52,11 +52,11 @@ test("decryptBlob refuses plaintext that differs from the manifest hash", async 
   );
 });
 
-test("buildSealApprovalTransaction calls the owner-gated Baton policy", () => {
+test("buildSealApprovalTransaction selects the owner-gated Baton policy", () => {
   const tx = buildSealApprovalTransaction({
     packageId: "0x1234",
     projectObjectId: "0x5678",
-    ownerCapId: "0x9abc",
+    authority: { kind: "owner", capId: "0x9abc" },
     identity: `0x${"00".repeat(64)}`,
   });
   const call = tx.getData().commands[0];
@@ -65,4 +65,16 @@ test("buildSealApprovalTransaction calls the owner-gated Baton policy", () => {
     assert.equal(call.MoveCall.function, "seal_approve");
     assert.equal(call.MoveCall.arguments.length, 3);
   }
+});
+
+test("buildSealApprovalTransaction selects the delegated Baton policy", () => {
+  const tx = buildSealApprovalTransaction({
+    packageId: "0x1234",
+    projectObjectId: "0x5678",
+    authority: { kind: "delegate", capId: "0xdef0" },
+    identity: `0x${"00".repeat(64)}`,
+  });
+  const call = tx.getData().commands[0];
+  assert.equal(call?.$kind, "MoveCall");
+  if (call?.$kind === "MoveCall") assert.equal(call.MoveCall.function, "seal_approve_shared");
 });

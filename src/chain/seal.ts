@@ -73,7 +73,7 @@ export function createSealPayloadEncryptor(options: SealNetworkOptions): SealPay
 
 export function buildSealApprovalTransaction(request: Pick<
   DecryptionRequest,
-  "packageId" | "projectObjectId" | "ownerCapId" | "identity"
+  "packageId" | "projectObjectId" | "authority" | "identity"
 >): Transaction {
   const identity = request.identity.startsWith("0x") ? request.identity.slice(2) : request.identity;
   if (!/^[a-fA-F0-9]{128}$/.test(identity)) {
@@ -81,11 +81,11 @@ export function buildSealApprovalTransaction(request: Pick<
   }
   const tx = new Transaction();
   tx.moveCall({
-    target: `${request.packageId}::memory::seal_approve`,
+    target: `${request.packageId}::memory::${request.authority.kind === "owner" ? "seal_approve" : "seal_approve_shared"}`,
     arguments: [
       tx.pure.vector("u8", Uint8Array.from(Buffer.from(identity, "hex"))),
       tx.object(request.projectObjectId),
-      tx.object(request.ownerCapId),
+      tx.object(request.authority.capId),
     ],
   });
   return tx;

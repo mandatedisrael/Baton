@@ -56,7 +56,7 @@ function fixture() {
     rpcUrl: "https://rpc.example",
     packageId: "0x1234",
     projectObjectId: "0x5678",
-    ownerCapId: "0x9abc",
+    authority: { kind: "owner", capId: "0x9abc" },
     registrationTx: "register",
     registeredAt: "2026-06-19T00:00:00.000Z",
     seal: { threshold: 1, serverConfigs: [{ objectId: "0x1", weight: 1 }] },

@@ -11,7 +11,7 @@ const remote = {
   rpcUrl: "https://rpc.example",
   packageId: PACKAGE,
   projectObjectId: PROJECT,
-  ownerCapId: "0x1",
+  authority: { kind: "owner", capId: "0x1" },
   registrationTx: "register",
   registeredAt: "2026-06-19T00:00:00.000Z",
   seal: { threshold: 1, serverConfigs: [{ objectId: "0x2", weight: 1 }] },

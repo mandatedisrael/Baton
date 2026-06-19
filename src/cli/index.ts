@@ -18,6 +18,9 @@ import { runInstall, runUninstall } from "./commands/install.ts";
 import { runDoctor } from "./commands/doctor.ts";
 import { runVerify } from "./commands/verify.ts";
 import { runQueueStatus } from "./commands/queue.ts";
+import { runLogin } from "./commands/login.ts";
+import { runRegister } from "./commands/register.ts";
+import { runFaucet } from "./commands/faucet.ts";
 import { TOOL_IDS, type ToolId } from "../schema/handoff.ts";
 import { RULES_TARGETS, type RulesFormat } from "../render/rules.ts";
 
@@ -27,6 +30,9 @@ Usage: baton <command>
 
 Commands:
   init         initialize a baton project in the current directory
+  login        create or load the user's protected Sui identity
+  faucet       fund that identity from the official Testnet faucet
+  register     register this project on Sui Testnet
   status       show the current working state
   pass         seal the current working state into a handoff (commit)
   log          list handoffs, newest first (* = head)
@@ -47,6 +53,8 @@ Options:
   --review          (pass) preview the distillation and confirm before sealing
   --tool <id>       (resume) receiving tool dialect: ${TOOL_IDS.join(" | ")}
   --write           (render) upsert the rules file instead of printing to stdout
+  --package <id>    (register) override the canonical Baton package
+  --rpc <url>       (register) override the Testnet RPC endpoint
 `;
 
 const VERSION = "0.1.0";
@@ -67,6 +75,28 @@ function main(argv: string[]): void {
       return;
     case "init":
       return runInit(process.cwd(), { hooks: !rest.includes("--no-hooks") });
+    case "login":
+      return runLogin();
+    case "faucet":
+      void runFaucet().catch(die);
+      return;
+    case "register": {
+      let packageId: string | undefined;
+      let rpcUrl: string | undefined;
+      for (let i = 0; i < rest.length; i += 2) {
+        const flag = rest[i];
+        const value = rest[i + 1];
+        if (!value || value.startsWith("--") || (flag !== "--package" && flag !== "--rpc")) {
+          process.stderr.write("usage: baton register [--package <id>] [--rpc <url>]\n");
+          process.exitCode = 2;
+          return;
+        }
+        if (flag === "--package") packageId = value;
+        else rpcUrl = value;
+      }
+      void runRegister(process.cwd(), { packageId, rpcUrl }).catch(die);
+      return;
+    }
     case "checkpoint":
       // Hook handler: must never disrupt the host session — always exit 0.
       void runCheckpoint().finally(() => process.exit(0));

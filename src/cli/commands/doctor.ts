@@ -2,6 +2,7 @@ import { ProjectStore } from "../../store/project.ts";
 import { findProjectRoot } from "../../store/paths.ts";
 import { hooksInstalled } from "../hooks.ts";
 import { fail, ok, warn } from "../output.ts";
+import { loadIdentity } from "../../chain/identity.ts";
 
 /**
  * `baton doctor` — diagnose the local installation and project.
@@ -52,6 +53,15 @@ export function runDoctor(cwd: string): void {
     const open = jobs.filter((job) => job.status !== "complete").length;
     return `${jobs.length} job(s), ${open} open`;
   });
+  if (store.config().remote) {
+    check("Sui identity", () => loadIdentity().record.address);
+    check("remote project", () => {
+      const remote = store.config().remote!;
+      return `${remote.network} · ${remote.projectObjectId}`;
+    });
+  } else {
+    warn("remote project: not registered — local handoffs still work; run `baton login` then `baton register`");
+  }
 
   // Capture readiness — surfaced so users can see whether automatic
   // checkpointing is actually wired up, without digging through configs.

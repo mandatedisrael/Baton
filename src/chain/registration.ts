@@ -45,11 +45,20 @@ export async function registerProjectOnSui(input: {
   projectId: string;
 }): Promise<RegistrationResult> {
   const transaction = buildRegistrationTransaction(input.packageId, input.projectId);
-  const response = await input.client.signAndExecuteTransaction({
-    transaction,
-    signer: input.keypair,
-    options: { showEffects: true, showObjectChanges: true },
-  });
+  let response;
+  try {
+    response = await input.client.signAndExecuteTransaction({
+      transaction,
+      signer: input.keypair,
+      options: { showEffects: true, showObjectChanges: true },
+    });
+  } catch (err) {
+    throw new BatonError(
+      "IO_ERROR",
+      `Sui registration request failed: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
+    );
+  }
   if (response.effects?.status.status !== "success") {
     throw new BatonError(
       "IO_ERROR",
@@ -60,6 +69,12 @@ export async function registerProjectOnSui(input: {
     throw new BatonError("INVALID_STATE", "Sui registration response omitted object changes");
   }
   const objects = extractRegistrationObjects(input.packageId, response.objectChanges);
-  await input.client.waitForTransaction({ digest: response.digest });
+  try {
+    await input.client.waitForTransaction({ digest: response.digest });
+  } catch (err) {
+    throw new BatonError("IO_ERROR", `registration executed but indexing timed out: ${response.digest}`, {
+      cause: err,
+    });
+  }
   return { digest: response.digest, ...objects };
 }

@@ -154,3 +154,13 @@ On 2026-06-19, the durable record for successful sponsored transaction `HcmxyxYj
 `baton-sponsor reconcile` derived the deterministic digest from the persisted transaction bytes, retrieved the existing transaction and object changes from Sui Testnet, verified the expected `ProjectMemory` and `OwnerCap` types, and restored the durable used result. The same submitted state was then recreated and the daemon was restarted. Startup reconciliation completed it before the HTTP listener became ready; `/ready` subsequently returned `200` and operator inspection showed the original digest.
 
 This proves both manual and automatic restart recovery from the post-execution/pre-commit crash window without resubmitting or spending gas twice. Submitted records are retained after local expiry and cannot be revoked or pruned until their Sui outcome is reconciled. Arbitrary process termination at every instruction boundary and long-duration Testnet outages remain broader chaos-testing work.
+
+## Live read-only remote audit and corruption evidence
+
+On 2026-06-19, `baton audit` ran from clean directories containing only public project configuration—no local handoff, attachment, queue, ciphertext, or remote sidecar files. It authenticated the owner-controlled Testnet baton `bf90541dc11b6ae4cafcd1d02f81b0c6302ab7c894fee948f92d1ccb9ea5ea6a` and the multi-blob baton `a219c88218a7145ff7bec63cfa6b9376aa065af3d0adf30c9073ea93311a4316`.
+
+For the multi-blob audit, Baton verified Sui anchor transaction `H2uSM8e1BdBrwDRG9xXPsm5T9M3qkug47CgFGBvKGNX2`, fetched handoff blob `gvcgNxS2Ao8njo91D2ka0868_-FBF6shkYPQorzSjMo` plus its attachment from Walrus, obtained owner-authorized keys from Seal, authenticated every plaintext hash and manifest field, and reported 784 verified plaintext bytes. A filesystem comparison before and after showed only `.baton/config.json`; audit wrote no recovered content.
+
+A live fault-injection retriever then flipped a byte inside the fetched encrypted body. Seal refused it with `Decryption failed`, and the clean directory remained unchanged. Running the same remote audit with the revoked delegate identity failed with `User does not have access to one or more of the requested keys`, also without local writes. Automated recovery tests additionally revoke access between successful handoff decryption and attachment decryption and prove that neither payload is persisted.
+
+This proves an on-demand, non-mutating integrity and authorization audit against live Testnet infrastructure, plus fail-closed corruption and revocation behavior. It is not continuous monitoring and does not prove availability during a Walrus, Seal, or Sui outage.

@@ -166,6 +166,7 @@ baton pass           # seal the working state into a baton
 baton queue encrypt  # encrypt queued payloads through Seal
 baton publish        # encrypt, upload to Walrus, and anchor on Sui
 baton fetch <id>     # recover a missing baton through Sui, Walrus, and Seal
+baton audit <id>     # authenticate the complete remote copy without local writes
 baton resume         # verify/recover, then render for the next agent
 baton share <address> --out teammate.json  # grant revocable read access
 # on the recipient's machine:
@@ -211,6 +212,7 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 | `baton register [--package <id>] [--rpc <url>] [--sponsor <url> --invite <token>]` | Register against the canonical Testnet package, optionally with invitation-scoped sponsored gas. |
 | `baton publish` | Resume every queued baton through Seal encryption, Walrus certification, and Sui anchoring. |
 | `baton fetch <full-id>` | Recover and authenticate a missing baton and all attachments from Sui, Walrus, and Seal. |
+| `baton audit <full-id>` | Authenticate the Sui manifest, Walrus ciphertexts, Seal access, plaintext hashes, and metadata without changing local state. |
 | `baton share <address> [--out <file>]` | Grant address-bound read access on Sui and write a public invitation. |
 | `baton accept <file>` | Verify a recipient-owned, active `AccessCap` and join the shared project. |
 | `baton revoke <address>` | Revoke delegated access on-chain; future uncached decryptions are denied. |
@@ -250,7 +252,7 @@ Handoffs are clearly the primitive every agent vendor wants — Cursor and Codex
 
 Baton is the handoff layer **nobody owns but you**: encrypted client-side, stored on neutral infrastructure, verifiable on-chain, shareable and revocable.
 
-The complete owner-controlled storage path and raw-keypair delegated-reader path are deployed and verified on Testnet: Seal encryption/decryption, resumable Walrus storage/retrieval, Sui manifest anchoring, attachment restoration, automatic recovery during `resume`, address-bound sharing, on-chain revocation, and invitation-scoped sponsored registration all run against live infrastructure. Exact object, blob, hash, capability, and transaction evidence lives in [docs/deployments.md](docs/deployments.md). A public sponsor deployment, zkLogin, external beta hardening, and Mainnet deployment remain in progress, so Baton does not yet claim Mainnet readiness.
+The complete owner-controlled storage path and raw-keypair delegated-reader path are deployed and verified on Testnet: Seal encryption/decryption, resumable Walrus storage/retrieval, Sui manifest anchoring, attachment restoration, read-only remote auditing, automatic recovery during `resume`, address-bound sharing, on-chain revocation, and invitation-scoped sponsored registration all run against live infrastructure. Exact object, blob, hash, capability, transaction, audit, and failure evidence lives in [docs/deployments.md](docs/deployments.md). A public sponsor deployment, zkLogin, external beta hardening, and Mainnet deployment remain in progress, so Baton does not yet claim Mainnet readiness.
 
 ---
 

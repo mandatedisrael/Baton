@@ -8,6 +8,7 @@ import {
   TESTNET_WALRUS,
 } from "../../chain/networks.ts";
 import { registerProjectOnSui } from "../../chain/registration.ts";
+import { registerProjectWithSponsor } from "../../chain/sponsor-client.ts";
 import { BatonError } from "../../core/errors.ts";
 import { ProjectStore } from "../../store/project.ts";
 import { ok } from "../output.ts";
@@ -16,6 +17,8 @@ export interface RegisterOptions {
   packageId?: string;
   rpcUrl?: string;
   identityPath?: string;
+  sponsorUrl?: string;
+  inviteToken?: string;
 }
 
 export async function runRegister(cwd: string, options: RegisterOptions = {}): Promise<void> {
@@ -29,26 +32,41 @@ export async function runRegister(cwd: string, options: RegisterOptions = {}): P
   const rpcUrl = options.rpcUrl ?? TESTNET_RPC_URL;
   const packageId = options.packageId ?? BATON_CORE_TESTNET_PACKAGE;
   const client = new SuiJsonRpcClient({ network: "testnet", url: rpcUrl });
-  let balance;
-  try {
-    balance = await client.getBalance({ owner: record.address });
-  } catch (err) {
-    throw new BatonError("IO_ERROR", `could not reach Sui Testnet at ${rpcUrl}`, { cause: err });
+  if ((options.sponsorUrl === undefined) !== (options.inviteToken === undefined)) {
+    throw new BatonError("INVALID_STATE", "sponsored registration requires both sponsor URL and invitation token");
   }
-  if (BigInt(balance.totalBalance) === 0n) {
-    throw new BatonError(
-      "INVALID_STATE",
-      `Baton identity ${record.address} needs Testnet SUI — run \`baton faucet\``,
-    );
+
+  if (!options.sponsorUrl) {
+    let balance;
+    try {
+      balance = await client.getBalance({ owner: record.address });
+    } catch (err) {
+      throw new BatonError("IO_ERROR", `could not reach Sui Testnet at ${rpcUrl}`, { cause: err });
+    }
+    if (BigInt(balance.totalBalance) === 0n) {
+      throw new BatonError(
+        "INVALID_STATE",
+        `Baton identity ${record.address} needs Testnet SUI — run \`baton faucet\` or use a sponsor invitation`,
+      );
+    }
   }
 
   const registeredAt = new Date().toISOString();
-  const result = await registerProjectOnSui({
-    client,
-    keypair,
-    packageId,
-    projectId: config.projectId,
-  });
+  const result = options.sponsorUrl
+    ? await registerProjectWithSponsor({
+        sponsorUrl: options.sponsorUrl,
+        inviteToken: options.inviteToken!,
+        packageId,
+        projectId: config.projectId,
+        userKeypair: keypair,
+      })
+    : await registerProjectOnSui({
+        client,
+        keypair,
+        packageId,
+        typePackageId: packageId === BATON_CORE_TESTNET_PACKAGE ? BATON_CORE_TESTNET_ORIGINAL_PACKAGE : packageId,
+        projectId: config.projectId,
+      });
   store.setRemoteConfig({
     network: "testnet",
     rpcUrl,
@@ -61,5 +79,5 @@ export async function runRegister(cwd: string, options: RegisterOptions = {}): P
     seal: TESTNET_SEAL,
     walrus: TESTNET_WALRUS,
   });
-  ok(`project registered and verified: ${result.projectObjectId}`);
+  ok(`project registered and verified${options.sponsorUrl ? " with sponsored gas" : ""}: ${result.projectObjectId}`);
 }

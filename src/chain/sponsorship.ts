@@ -91,12 +91,23 @@ export async function executeSponsoredRegistration(input: {
   userKeypair: Ed25519Keypair;
   sponsorKeypair: Ed25519Keypair;
   transactionBytes: Uint8Array;
+  typePackageId: string;
 }): Promise<RegistrationResult> {
   const user = await input.userKeypair.signTransaction(input.transactionBytes);
+  return executeSponsoredRegistrationWithSignature({ ...input, userSignature: user.signature });
+}
+
+export async function executeSponsoredRegistrationWithSignature(input: {
+  client: SuiJsonRpcClient;
+  sponsorKeypair: Ed25519Keypair;
+  transactionBytes: Uint8Array;
+  userSignature: string;
+  typePackageId: string;
+}): Promise<RegistrationResult> {
   const sponsor = await input.sponsorKeypair.signTransaction(input.transactionBytes);
   const response = await input.client.executeTransactionBlock({
     transactionBlock: input.transactionBytes,
-    signature: [user.signature, sponsor.signature],
+    signature: [input.userSignature, sponsor.signature],
     options: { showEffects: true, showObjectChanges: true },
   });
   if (response.effects?.status.status !== "success") {
@@ -105,12 +116,7 @@ export async function executeSponsoredRegistration(input: {
   if (!response.objectChanges) {
     throw new BatonError("INVALID_STATE", "sponsored registration response omitted object changes");
   }
-  const packageId = response.objectChanges.find((change) => change.type === "created" && change.objectType?.endsWith("::memory::OwnerCap"));
-  if (!packageId || packageId.type !== "created") {
-    throw new BatonError("INVALID_STATE", "sponsored registration did not create an OwnerCap");
-  }
-  const modulePackage = packageId.objectType.slice(0, packageId.objectType.indexOf("::"));
-  const objects = extractRegistrationObjects(modulePackage, response.objectChanges);
+  const objects = extractRegistrationObjects(input.typePackageId, response.objectChanges);
   await input.client.waitForTransaction({ digest: response.digest });
   return { digest: response.digest, ...objects };
 }

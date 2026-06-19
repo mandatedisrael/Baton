@@ -23,7 +23,8 @@
   },
   "bin": {
     "baton": "./dist/cli/index.js",
-    "baton-mcp": "./dist/mcp/index.js"
+    "baton-mcp": "./dist/mcp/index.js",
+    "baton-sponsor": "./dist/sponsor/index.js"
   },
   "scripts": {
     "baton": "node src/cli/index.ts",

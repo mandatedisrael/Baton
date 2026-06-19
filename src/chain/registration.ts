@@ -42,6 +42,7 @@ export async function registerProjectOnSui(input: {
   client: SuiJsonRpcClient;
   keypair: Ed25519Keypair;
   packageId: string;
+  typePackageId?: string;
   projectId: string;
 }): Promise<RegistrationResult> {
   const transaction = buildRegistrationTransaction(input.packageId, input.projectId);
@@ -68,7 +69,7 @@ export async function registerProjectOnSui(input: {
   if (!response.objectChanges) {
     throw new BatonError("INVALID_STATE", "Sui registration response omitted object changes");
   }
-  const objects = extractRegistrationObjects(input.packageId, response.objectChanges);
+  const objects = extractRegistrationObjects(input.typePackageId ?? input.packageId, response.objectChanges);
   try {
     await input.client.waitForTransaction({ digest: response.digest });
   } catch (err) {

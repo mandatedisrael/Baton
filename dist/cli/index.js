@@ -70,6 +70,8 @@ Options:
   --write           (render) upsert the rules file instead of printing to stdout
   --package <id>    (register) override the canonical Baton package
   --rpc <url>       (register) override the Testnet RPC endpoint
+  --sponsor <url>   (register) use a constrained Baton sponsor service
+  --invite <token>  (register) one-use sponsor invitation token
   --out <file>      (share) invitation output path
   --amount <mist>   (fund-storage) SUI MIST to exchange (default 100000000)
 `;
@@ -111,20 +113,26 @@ function main(argv) {
         case "register": {
             let packageId;
             let rpcUrl;
+            let sponsorUrl;
+            let inviteToken;
             for (let i = 0; i < rest.length; i += 2) {
                 const flag = rest[i];
                 const value = rest[i + 1];
-                if (!value || value.startsWith("--") || (flag !== "--package" && flag !== "--rpc")) {
-                    process.stderr.write("usage: baton register [--package <id>] [--rpc <url>]\n");
+                if (!value || value.startsWith("--") || !["--package", "--rpc", "--sponsor", "--invite"].includes(flag)) {
+                    process.stderr.write("usage: baton register [--package <id>] [--rpc <url>] [--sponsor <url> --invite <token>]\n");
                     process.exitCode = 2;
                     return;
                 }
                 if (flag === "--package")
                     packageId = value;
-                else
+                else if (flag === "--rpc")
                     rpcUrl = value;
+                else if (flag === "--sponsor")
+                    sponsorUrl = value;
+                else
+                    inviteToken = value;
             }
-            void runRegister(process.cwd(), { packageId, rpcUrl }).catch(die);
+            void runRegister(process.cwd(), { packageId, rpcUrl, sponsorUrl, inviteToken }).catch(die);
             return;
         }
         case "publish":

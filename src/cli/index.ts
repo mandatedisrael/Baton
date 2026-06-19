@@ -21,6 +21,7 @@ import { runQueueAnchor, runQueueEncrypt, runQueueStatus, runQueueUpload } from 
 import { runLogin } from "./commands/login.ts";
 import { runRegister } from "./commands/register.ts";
 import { runFaucet } from "./commands/faucet.ts";
+import { runPublish } from "./commands/publish.ts";
 import { TOOL_IDS, type ToolId } from "../schema/handoff.ts";
 import { RULES_TARGETS, type RulesFormat } from "../render/rules.ts";
 
@@ -33,6 +34,7 @@ Commands:
   login        create or load the user's protected Sui identity
   faucet       fund that identity from the official Testnet faucet
   register     register this project on Sui Testnet
+  publish      encrypt, store, and anchor every queued baton
   status       show the current working state
   pass         seal the current working state into a handoff (commit)
   log          list handoffs, newest first (* = head)
@@ -100,6 +102,9 @@ function main(argv: string[]): void {
       void runRegister(process.cwd(), { packageId, rpcUrl }).catch(die);
       return;
     }
+    case "publish":
+      void runPublish(process.cwd()).catch(die);
+      return;
     case "checkpoint":
       // Hook handler: must never disrupt the host session — always exit 0.
       void runCheckpoint().finally(() => process.exit(0));

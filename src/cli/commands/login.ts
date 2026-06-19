@@ -33,8 +33,9 @@ export async function runLogin(opts: LoginOptions = {}): Promise<void> {
     saveZkLoginIdentity(session, identityPath);
 
     ok(`Baton zkLogin identity ready: ${session.address} (provider: ${session.provider})`);
-    warn("IMPORTANT: Back up your userSalt. If lost you cannot recover this address.");
-    warn(`Salt: ${session.userSalt}`);
+    warn("IMPORTANT: Back up your userSalt securely. If lost you cannot recover this address or decrypt shared data.");
+    warn(`Salt (keep private): ${session.userSalt}`);
+    ok("To re-display salt later: run `baton login --zk` again (it will show if re-auth needed).");
     return;
   }
 

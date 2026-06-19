@@ -3,7 +3,7 @@ import { ProjectStore } from "../../store/project.ts";
 import { encryptQueuedJob } from "../../chain/payloads.ts";
 import { createSealPayloadEncryptor } from "../../chain/seal.ts";
 import { BatonError } from "../../core/errors.ts";
-import { loadIdentity, getIdentityAddress } from "../../chain/identity.ts";
+import { loadIdentity, getIdentityAddress, requireEd25519Identity } from "../../chain/identity.ts";
 import { createWalrusUploader } from "../../chain/walrus.ts";
 import { uploadQueuedJob } from "../../chain/upload.ts";
 import { anchorQueuedJob } from "../../chain/anchor.ts";

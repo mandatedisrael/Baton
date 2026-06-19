@@ -18,5 +18,9 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "@mysten/seal": "^1.2.1",
+    "@mysten/sui": "^2.19.0"
   }
 }

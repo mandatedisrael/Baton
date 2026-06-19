@@ -5,11 +5,14 @@ import { BATON_CORE_TESTNET_ORIGINAL_PACKAGE, BATON_CORE_TESTNET_PACKAGE, TESTNE
 import { SPONSORED_REGISTRATION_GAS_BUDGET } from "../chain/sponsorship.js";
 import { BatonError } from "../core/errors.js";
 import { createSponsorServer } from "./server.js";
-import { defaultSponsorStatePath, issueSponsorInvite } from "./state.js";
+import { defaultSponsorStatePath, issueSponsorInviteDetails, listSponsorInvites, pruneSponsorInvites, revokeSponsorInvite, withSponsorStateLock, } from "./state.js";
 const USAGE = `baton-sponsor — constrained Testnet gas sponsorship for Baton onboarding
 
 Usage:
-  baton-sponsor invite [--state <file>] [--ttl-hours <1-168>]
+  baton-sponsor invite [--state <file>] [--ttl-hours <1-168>] [--recipient <address>] [--project <id>]
+  baton-sponsor list [--state <file>] [--json]
+  baton-sponsor revoke --id <invite-id> [--state <file>]
+  baton-sponsor prune [--state <file>]
   baton-sponsor serve [--state <file>] [--identity <file>] [--port <port>]
 
 The HTTP service binds to 127.0.0.1 only. Put a TLS reverse proxy in front of
@@ -35,9 +38,39 @@ async function main() {
         const rawTtl = flag(args, "--ttl-hours") ?? "24";
         if (!/^\d+$/.test(rawTtl))
             throw new BatonError("INVALID_STATE", "--ttl-hours must be an integer");
-        const token = issueSponsorInvite(statePath, new Date(), Number(rawTtl));
-        process.stdout.write(`${token}\n`);
-        process.stderr.write(`Sponsor invitation created · valid ${rawTtl} hour(s) · stored hashed in ${statePath}\n`);
+        const issued = await withSponsorStateLock(statePath, () => issueSponsorInviteDetails(statePath, new Date(), Number(rawTtl), {
+            recipient: flag(args, "--recipient"),
+            projectId: flag(args, "--project"),
+        }));
+        process.stdout.write(`${issued.token}\n`);
+        process.stderr.write(`Sponsor invitation ${issued.id} created · valid ${rawTtl} hour(s) · stored hashed in ${statePath}\n`);
+        return;
+    }
+    if (command === "list") {
+        const invites = await withSponsorStateLock(statePath, () => listSponsorInvites(statePath));
+        if (args.includes("--json"))
+            process.stdout.write(`${JSON.stringify(invites, null, 2)}\n`);
+        else if (invites.length === 0)
+            process.stdout.write("No sponsor invitations.\n");
+        else {
+            for (const invite of invites) {
+                const binding = [invite.recipient, invite.projectId].filter(Boolean).join(" · ") || "unbound";
+                process.stdout.write(`${invite.id}  ${invite.status.padEnd(9)}  ${invite.expiresAt}  ${binding}${invite.digest ? `  ${invite.digest}` : ""}\n`);
+            }
+        }
+        return;
+    }
+    if (command === "revoke") {
+        const id = flag(args, "--id");
+        if (!id)
+            throw new BatonError("INVALID_STATE", "revoke requires --id <invite-id>");
+        await withSponsorStateLock(statePath, () => revokeSponsorInvite(statePath, id));
+        process.stderr.write(`Sponsor invitation ${id} revoked.\n`);
+        return;
+    }
+    if (command === "prune") {
+        const removed = await withSponsorStateLock(statePath, () => pruneSponsorInvites(statePath));
+        process.stderr.write(`Pruned ${removed} expired or revoked sponsor invitation(s).\n`);
         return;
     }
     if (command !== "serve")

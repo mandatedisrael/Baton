@@ -4,12 +4,18 @@ import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  acquireSponsorStateLock,
   completeSponsorReservation,
   existingSponsorReservation,
   issueSponsorInvite,
+  issueSponsorInviteDetails,
+  listSponsorInvites,
   loadSponsorReservation,
+  pruneSponsorInvites,
+  revokeSponsorInvite,
   saveSponsorReservation,
   type SponsorReservation,
+  withSponsorStateLock,
 } from "../src/sponsor/state.ts";
 
 let root: string;
@@ -43,6 +49,30 @@ test("sponsor invitation tokens are stored hashed with restrictive permissions",
   assert.doesNotMatch(readFileSync(path, "utf8"), new RegExp(token));
 });
 
+test("the file-backed sponsor state permits only one daemon writer", () => {
+  const release = acquireSponsorStateLock(path);
+  try {
+    assert.throws(() => acquireSponsorStateLock(path), /already in use by process/);
+  } finally {
+    release();
+  }
+  const releaseAgain = acquireSponsorStateLock(path);
+  releaseAgain();
+});
+
+test("cross-process state operations serialize instead of losing updates", async () => {
+  const order: string[] = [];
+  await Promise.all([
+    withSponsorStateLock(path, async () => {
+      order.push("first-start");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      order.push("first-end");
+    }),
+    withSponsorStateLock(path, () => { order.push("second"); }),
+  ]);
+  assert.deepEqual(order, ["first-start", "first-end", "second"]);
+});
+
 test("reservation is idempotent for one sender and project", () => {
   const now = new Date("2026-06-19T12:00:00.000Z");
   const token = issueSponsorInvite(path, now);
@@ -65,4 +95,41 @@ test("completed invitations return their durable result and cannot be reused", (
   }, now);
   assert.equal(loadSponsorReservation(path, token, "request-1", now).result?.digest, "digest");
   assert.throws(() => saveSponsorReservation(path, token, reservation(), now), /already been used/);
+});
+
+test("bound invitations reject recipient and project substitution before reservation", () => {
+  const now = new Date("2026-06-19T12:00:00.000Z");
+  const issued = issueSponsorInviteDetails(path, now, 1, { recipient: "0x2", projectId: "project-1" });
+  assert.throws(
+    () => existingSponsorReservation({ path, token: issued.token, sender: "0x3", projectId: "project-1", now }),
+    /bound to another recipient/,
+  );
+  assert.throws(
+    () => existingSponsorReservation({ path, token: issued.token, sender: "0x2", projectId: "project-2", now }),
+    /bound to another project/,
+  );
+  assert.equal(existingSponsorReservation({ path, token: issued.token, sender: "0x2", projectId: "project-1", now }), null);
+  const [summary] = listSponsorInvites(path, now);
+  assert.equal(summary?.id, issued.id);
+  assert.equal(summary?.recipient, "0x0000000000000000000000000000000000000000000000000000000000000002");
+  assert.equal(summary?.projectId, "project-1");
+  assert.equal(summary?.status, "available");
+});
+
+test("operators can revoke and prune unused invitations without deleting audit results", () => {
+  const now = new Date("2026-06-19T12:00:00.000Z");
+  const revoked = issueSponsorInviteDetails(path, now, 1);
+  const used = issueSponsorInviteDetails(path, now, 1);
+  saveSponsorReservation(path, used.token, reservation(), now);
+  completeSponsorReservation(path, used.token, "request-1", {
+    digest: "digest",
+    projectObjectId: "0xproject",
+    ownerCapId: "0xcap",
+  }, now);
+  revokeSponsorInvite(path, revoked.id, now);
+  assert.throws(() => existingSponsorReservation({ path, token: revoked.token, sender: "0x2", projectId: "project-1", now }), /revoked/);
+  assert.equal(listSponsorInvites(path, now).find((invite) => invite.id === revoked.id)?.status, "revoked");
+  assert.equal(pruneSponsorInvites(path, now), 1);
+  assert.deepEqual(listSponsorInvites(path, now).map((invite) => invite.status), ["used"]);
+  assert.throws(() => revokeSponsorInvite(path, used.id, now), /used sponsor invitation cannot be revoked/);
 });

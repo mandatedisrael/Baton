@@ -19,6 +19,7 @@ import {
   saveSponsorReservation,
   reservedSponsorGasObjects,
   type SponsorReservation,
+  withSponsorStateLock,
 } from "./state.ts";
 
 const MAX_BODY_BYTES = 16 * 1024;
@@ -115,97 +116,97 @@ export function createSponsorServer(options: SponsorServerOptions): Server {
         const input = strictStrings(await body(request), ["token", "sender", "projectId"]);
         const sender = normalizeSuiAddress(input.sender!);
         const projectId = input.projectId!;
-        const existing = existingSponsorReservation({
-          path: options.statePath,
-          token: input.token!,
-          sender,
-          projectId,
-          now: now(),
-        });
-        if (existing) {
-          json(response, 200, publicEnvelope(existing));
-          return;
-        }
-        const system = await options.client.getLatestSuiSystemState();
-        const gasPrice = await options.client.getReferenceGasPrice();
-        const reservedGas = reservedSponsorGasObjects(options.statePath, now());
-        let cursor: string | null | undefined;
-        let gasPayment: Array<{ objectId: string; version: string; digest: string }> = [];
-        do {
-          const coins = await options.client.getCoins({
-            owner: options.sponsorKeypair.toSuiAddress(),
-            coinType: "0x2::sui::SUI",
-            cursor,
-            limit: 50,
+        const envelope = await withSponsorStateLock(options.statePath, async () => {
+          const existing = existingSponsorReservation({
+            path: options.statePath,
+            token: input.token!,
+            sender,
+            projectId,
+            now: now(),
           });
-          const coin = coins.data.find((candidate) =>
-            BigInt(candidate.balance) >= SPONSORED_REGISTRATION_GAS_BUDGET &&
-            !reservedGas.has(candidate.coinObjectId.toLowerCase()),
-          );
-          if (coin) {
-            gasPayment = [{ objectId: coin.coinObjectId, version: coin.version, digest: coin.digest }];
-            break;
-          }
-          cursor = coins.hasNextPage ? coins.nextCursor : null;
-        } while (cursor);
-        if (gasPayment.length === 0) throw new BatonError("INVALID_STATE", "sponsor has no unreserved SUI coin large enough for registration");
-        const expirationEpoch = BigInt(system.epoch) + 1n;
-        const requestNow = now();
-        const expiresAt = new Date(requestNow.getTime() + REQUEST_TTL_MS).toISOString();
-        const transactionBytes = await buildSponsoredRegistrationBytes({
-          packageId: options.policyPackageId,
-          projectId,
-          sender,
-          sponsor: options.sponsorKeypair.toSuiAddress(),
-          gasPrice,
-          gasPayment,
-          expirationEpoch,
+          if (existing) return publicEnvelope(existing);
+          const system = await options.client.getLatestSuiSystemState();
+          const gasPrice = await options.client.getReferenceGasPrice();
+          const reservedGas = reservedSponsorGasObjects(options.statePath, now());
+          let cursor: string | null | undefined;
+          let gasPayment: Array<{ objectId: string; version: string; digest: string }> = [];
+          do {
+            const coins = await options.client.getCoins({
+              owner: options.sponsorKeypair.toSuiAddress(),
+              coinType: "0x2::sui::SUI",
+              cursor,
+              limit: 50,
+            });
+            const coin = coins.data.find((candidate) =>
+              BigInt(candidate.balance) >= SPONSORED_REGISTRATION_GAS_BUDGET &&
+              !reservedGas.has(candidate.coinObjectId.toLowerCase()),
+            );
+            if (coin) {
+              gasPayment = [{ objectId: coin.coinObjectId, version: coin.version, digest: coin.digest }];
+              break;
+            }
+            cursor = coins.hasNextPage ? coins.nextCursor : null;
+          } while (cursor);
+          if (gasPayment.length === 0) throw new BatonError("INVALID_STATE", "sponsor has no unreserved SUI coin large enough for registration");
+          const expirationEpoch = BigInt(system.epoch) + 1n;
+          const requestNow = now();
+          const expiresAt = new Date(requestNow.getTime() + REQUEST_TTL_MS).toISOString();
+          const transactionBytes = await buildSponsoredRegistrationBytes({
+            packageId: options.policyPackageId,
+            projectId,
+            sender,
+            sponsor: options.sponsorKeypair.toSuiAddress(),
+            gasPrice,
+            gasPayment,
+            expirationEpoch,
+          });
+          const reservation: SponsorReservation = {
+            requestId: randomUUID(),
+            transactionBytes: serializeSponsoredTransaction(transactionBytes),
+            sponsor: options.sponsorKeypair.toSuiAddress(),
+            gasPrice: gasPrice.toString(),
+            gasBudget: SPONSORED_REGISTRATION_GAS_BUDGET.toString(),
+            gasPayment,
+            expirationEpoch: expirationEpoch.toString(),
+            expiresAt,
+            sender,
+            projectId,
+            result: null,
+          };
+          saveSponsorReservation(options.statePath, input.token!, reservation, requestNow);
+          return publicEnvelope(reservation);
         });
-        const reservation: SponsorReservation = {
-          requestId: randomUUID(),
-          transactionBytes: serializeSponsoredTransaction(transactionBytes),
-          sponsor: options.sponsorKeypair.toSuiAddress(),
-          gasPrice: gasPrice.toString(),
-          gasBudget: SPONSORED_REGISTRATION_GAS_BUDGET.toString(),
-          gasPayment,
-          expirationEpoch: expirationEpoch.toString(),
-          expiresAt,
-          sender,
-          projectId,
-          result: null,
-        };
-        saveSponsorReservation(options.statePath, input.token!, reservation, requestNow);
-        json(response, 200, publicEnvelope(reservation));
+        json(response, 200, envelope);
         return;
       }
       if (request.method === "POST" && request.url === "/v1/register/execute") {
         const input = strictStrings(await body(request), ["token", "requestId", "userSignature"]);
-        const reservation = loadSponsorReservation(options.statePath, input.token!, input.requestId!, now());
-        if (reservation.result) {
-          json(response, 200, reservation.result);
-          return;
-        }
-        if (inFlight.has(reservation.requestId)) throw new BatonError("INVALID_STATE", "sponsored registration is already executing");
-        const transactionBytes = fromBase64(reservation.transactionBytes);
-        const valid = await isValidTransactionSignature(transactionBytes, input.userSignature!, {
-          client: options.client,
-          address: reservation.sender,
-        });
-        if (!valid) throw new BatonError("INVALID_STATE", "user signature does not authorize the sponsored registration");
-        inFlight.add(reservation.requestId);
-        try {
-          const result = await executeSponsoredRegistrationWithSignature({
+        const result = await withSponsorStateLock(options.statePath, async () => {
+          const reservation = loadSponsorReservation(options.statePath, input.token!, input.requestId!, now());
+          if (reservation.result) return reservation.result;
+          if (inFlight.has(reservation.requestId)) throw new BatonError("INVALID_STATE", "sponsored registration is already executing");
+          const transactionBytes = fromBase64(reservation.transactionBytes);
+          const valid = await isValidTransactionSignature(transactionBytes, input.userSignature!, {
             client: options.client,
-            sponsorKeypair: options.sponsorKeypair,
-            transactionBytes,
-            userSignature: input.userSignature!,
-            typePackageId: options.typePackageId,
+            address: reservation.sender,
           });
-          completeSponsorReservation(options.statePath, input.token!, reservation.requestId, result, now());
-          json(response, 200, result);
-        } finally {
-          inFlight.delete(reservation.requestId);
-        }
+          if (!valid) throw new BatonError("INVALID_STATE", "user signature does not authorize the sponsored registration");
+          inFlight.add(reservation.requestId);
+          try {
+            const executed = await executeSponsoredRegistrationWithSignature({
+              client: options.client,
+              sponsorKeypair: options.sponsorKeypair,
+              transactionBytes,
+              userSignature: input.userSignature!,
+              typePackageId: options.typePackageId,
+            });
+            completeSponsorReservation(options.statePath, input.token!, reservation.requestId, executed, now());
+            return executed;
+          } finally {
+            inFlight.delete(reservation.requestId);
+          }
+        }, 90_000);
+        json(response, 200, result);
         return;
       }
       json(response, 404, { error: "not found" });

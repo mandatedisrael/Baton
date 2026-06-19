@@ -7,7 +7,7 @@ import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { normalizeSuiObjectId } from "@mysten/sui/utils";
 import { registerProjectWithSponsor, validateSponsorUrl } from "../src/chain/sponsor-client.ts";
 import { createSponsorServer } from "../src/sponsor/server.ts";
-import { issueSponsorInvite } from "../src/sponsor/state.ts";
+import { issueSponsorInvite, issueSponsorInviteDetails } from "../src/sponsor/state.ts";
 
 const PACKAGE = normalizeSuiObjectId("0x1234");
 let root: string;
@@ -114,6 +114,49 @@ test("one-use invitation sponsors only the exact user registration", async () =>
       }),
       /reserved for another registration/,
     );
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test("recipient-bound invitations are refused before gas metadata is fetched", async () => {
+  const sponsor = new Ed25519Keypair();
+  const intended = new Ed25519Keypair();
+  const attacker = new Ed25519Keypair();
+  const statePath = join(root, "sponsor.json");
+  const { token } = issueSponsorInviteDetails(statePath, new Date(), 1, {
+    recipient: intended.toSuiAddress(),
+    projectId: "project-1",
+  });
+  let rpcCalls = 0;
+  const client = {
+    async getLatestSuiSystemState() { rpcCalls += 1; return { epoch: "1200" }; },
+  };
+  const server = createSponsorServer({
+    client: client as never,
+    sponsorKeypair: sponsor,
+    statePath,
+    policyPackageId: PACKAGE,
+    typePackageId: PACKAGE,
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  try {
+    const address = server.address();
+    assert(address && typeof address === "object");
+    await assert.rejects(
+      registerProjectWithSponsor({
+        sponsorUrl: `http://127.0.0.1:${address.port}`,
+        inviteToken: token,
+        packageId: PACKAGE,
+        projectId: "project-1",
+        userKeypair: attacker,
+      }),
+      /bound to another recipient/,
+    );
+    assert.equal(rpcCalls, 0);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }

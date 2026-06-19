@@ -228,18 +228,28 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 | `baton queue anchor` | Anchor certified Walrus blob references in the project's Sui manifest. |
 | `baton render <claude-md\|agents-md\|cursorrules> [id] [--write]` | Project a baton into a per-tool rules file. |
 | `baton install` / `uninstall` | Add or remove the Claude Code checkpoint hook. |
+| `baton mcp setup` | Print ready-to-paste MCP configs for Codex, Cursor, etc. |
 | `baton doctor` | Diagnose the install and verify local batons. |
 
-### MCP server
+### Using Baton inside your agent (low-friction setup)
 
-Install Baton globally, then point any stdio-compatible MCP client at the project it may access:
-
+**Claude Code**
 ```sh
-npm install -g https://github.com/mandatedisrael/Baton/releases/download/v0.7.0/baton-0.7.0.tgz
-baton-mcp --project /absolute/path/to/project
+baton init
 ```
+This installs the Stop hook for automatic checkpoints. Work normally. Start new chats with `baton resume` or `baton render claude-md --write` (creates CLAUDE.md).
 
-The server exposes verified status, log, search, show, resume, and citation tools plus guarded self-report checkpoint and pass tools. Each server process is pinned to one project root; `baton_pass` requires explicit confirmation. See [docs/mcp.md](docs/mcp.md) for tool contracts, Codex configuration, generic client configuration, and safety behavior.
+**Codex / Cursor / other MCP clients**
+1. Run `baton init` (and `baton mcp setup` for copy-paste config).
+2. Add the `baton-mcp` server in your client's MCP settings (see `baton mcp setup codex` etc.).
+3. In a new session, say "resume using baton tools" or let the agent call `baton_resume`.
+
+The MCP server gives agents native tools:
+- `baton_status`, `baton_resume`, `baton_checkpoint`, `baton_pass` (with explicit confirm), `baton_verify`, etc.
+
+Once configured, agents can manage state themselves: "pass the baton when done" will call the tool after your approval.
+
+See `baton mcp setup --help` (or run without args) and [docs/mcp.md](docs/mcp.md).
 
 ---
 

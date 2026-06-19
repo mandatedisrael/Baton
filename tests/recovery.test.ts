@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { canonicalize } from "../src/core/canonical.ts";
 import { finalize } from "../src/core/finalize.ts";
 import { hashBytes } from "../src/core/hash.ts";
-import { recoverRemoteHandoff } from "../src/chain/recovery.ts";
+import { recoverRemoteHandoff, verifyRemoteHandoff } from "../src/chain/recovery.ts";
 import type { PayloadDecryptor } from "../src/chain/decryption.ts";
 import type { VerifiedRemoteManifest } from "../src/chain/manifest.ts";
 import type { RemoteProjectConfig } from "../src/schema/project.ts";
@@ -83,6 +83,16 @@ test("recoverRemoteHandoff authenticates the complete remote set before persisti
   assert.deepEqual(recovered, f.handoff);
   assert.deepEqual(f.store.loadHandoff(f.id), f.handoff);
   assert.deepEqual(f.store.loadAttachment(f.attachment), f.attachmentBytes);
+});
+
+test("verifyRemoteHandoff audits every payload without changing local state", async () => {
+  const f = fixture();
+  const verified = await verifyRemoteHandoff(f);
+  assert.deepEqual(verified.handoff, f.handoff);
+  assert.equal(verified.attachments.length, 1);
+  assert.equal(verified.attachments[0]?.bytes.byteLength, f.attachmentBytes.byteLength);
+  assert.throws(() => f.store.loadHandoff(f.id), /no handoff/);
+  assert.throws(() => f.store.loadAttachment(f.attachment), /not available locally/);
 });
 
 test("recoverRemoteHandoff refuses manifest metadata substitution", async () => {

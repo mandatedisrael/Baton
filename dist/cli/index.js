@@ -27,6 +27,7 @@ import { runFetch } from "./commands/fetch.js";
 import { runShare } from "./commands/share.js";
 import { runRevoke } from "./commands/revoke.js";
 import { runAccept } from "./commands/accept.js";
+import { runAudit } from "./commands/audit.js";
 import { TOOL_IDS } from "../schema/handoff.js";
 import { RULES_TARGETS } from "../render/rules.js";
 import { readFileSync } from "node:fs";
@@ -42,6 +43,7 @@ Commands:
   register     register this project on Sui Testnet
   publish      encrypt, store, and anchor every queued baton
   fetch <id>   recover and verify a full baton from Sui, Walrus, and Seal
+  audit <id>   authenticate a remote baton without changing local state
   share <address> grant read access and write a recipient invitation
   accept <file> verify and join a shared project from an invitation
   revoke <address> revoke delegated read access immediately
@@ -146,6 +148,16 @@ function main(argv) {
                 return;
             }
             void runFetch(process.cwd(), id).catch(die);
+            return;
+        }
+        case "audit": {
+            const id = rest[0];
+            if (rest.length !== 1 || !id) {
+                process.stderr.write("usage: baton audit <full-handoff-id>\n");
+                process.exitCode = 2;
+                return;
+            }
+            void runAudit(process.cwd(), id).catch(die);
             return;
         }
         case "share": {

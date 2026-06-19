@@ -92,6 +92,29 @@ export async function recoverRemoteHandoff(input: {
   retriever: WalrusRetriever;
   decryptor: PayloadDecryptor;
 }): Promise<Handoff> {
+  const verified = await verifyRemoteHandoff(input);
+  // Persist only after the complete remote set has been authenticated.
+  for (const recovered of verified.attachments) {
+    input.store.saveAttachment(verified.handoff.attachments[recovered.index]!, recovered.bytes);
+  }
+  input.store.saveHandoff(verified.handoff, input.manifest.handoffId);
+  return verified.handoff;
+}
+
+export interface VerifiedRemoteHandoff {
+  handoff: Handoff;
+  handoffBytes: number;
+  attachments: Array<{ index: number; bytes: Uint8Array }>;
+}
+
+/** Authenticate the complete remote set without changing local project state. */
+export async function verifyRemoteHandoff(input: {
+  store: ProjectStore;
+  manifest: VerifiedRemoteManifest;
+  remote: RemoteProjectConfig;
+  retriever: WalrusRetriever;
+  decryptor: PayloadDecryptor;
+}): Promise<VerifiedRemoteHandoff> {
   const handoffBytes = await recoverBlob({ ...input, descriptor: input.manifest.handoff });
   let handoff: Handoff;
   try {
@@ -112,10 +135,5 @@ export async function recoverRemoteHandoff(input: {
       bytes: await recoverBlob({ ...input, descriptor: input.manifest.attachments[index]! }),
     });
   }
-  // Persist only after the complete remote set has been authenticated.
-  for (const recovered of recoveredAttachments) {
-    input.store.saveAttachment(handoff.attachments[recovered.index]!, recovered.bytes);
-  }
-  input.store.saveHandoff(handoff, input.manifest.handoffId);
-  return handoff;
+  return { handoff, handoffBytes: handoffBytes.byteLength, attachments: recoveredAttachments };
 }

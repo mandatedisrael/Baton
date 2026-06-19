@@ -71,6 +71,16 @@ async function recoverBlob(input) {
     });
 }
 export async function recoverRemoteHandoff(input) {
+    const verified = await verifyRemoteHandoff(input);
+    // Persist only after the complete remote set has been authenticated.
+    for (const recovered of verified.attachments) {
+        input.store.saveAttachment(verified.handoff.attachments[recovered.index], recovered.bytes);
+    }
+    input.store.saveHandoff(verified.handoff, input.manifest.handoffId);
+    return verified.handoff;
+}
+/** Authenticate the complete remote set without changing local project state. */
+export async function verifyRemoteHandoff(input) {
     const handoffBytes = await recoverBlob({ ...input, descriptor: input.manifest.handoff });
     let handoff;
     try {
@@ -91,11 +101,6 @@ export async function recoverRemoteHandoff(input) {
             bytes: await recoverBlob({ ...input, descriptor: input.manifest.attachments[index] }),
         });
     }
-    // Persist only after the complete remote set has been authenticated.
-    for (const recovered of recoveredAttachments) {
-        input.store.saveAttachment(handoff.attachments[recovered.index], recovered.bytes);
-    }
-    input.store.saveHandoff(handoff, input.manifest.handoffId);
-    return handoff;
+    return { handoff, handoffBytes: handoffBytes.byteLength, attachments: recoveredAttachments };
 }
 //# sourceMappingURL=recovery.js.map

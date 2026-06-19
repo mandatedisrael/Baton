@@ -16,6 +16,7 @@ import { runRender } from "./commands/render.ts";
 import { runCheckpoint } from "./commands/checkpoint.ts";
 import { runInstall, runUninstall } from "./commands/install.ts";
 import { runDoctor } from "./commands/doctor.ts";
+import { runVerify } from "./commands/verify.ts";
 import { TOOL_IDS, type ToolId } from "../schema/handoff.ts";
 import { RULES_TARGETS, type RulesFormat } from "../render/rules.ts";
 
@@ -30,6 +31,8 @@ Commands:
   log          list handoffs, newest first (* = head)
   show <id>    print a verified handoff by id (short ids ok)
   resume [id]  render the resume prompt for a handoff (head if omitted)
+  verify <claim-id> [id]
+               show the verified source lines behind a distilled claim
   render <fmt> project a handoff into a rules file (${Object.keys(RULES_TARGETS).join(" | ")})
   install      register the Claude Code checkpoint hook for this project
   uninstall    remove the Claude Code checkpoint hook
@@ -100,6 +103,15 @@ function main(argv: string[]): void {
       }
       const id = rest.find((a, i) => !a.startsWith("--") && rest[i - 1] !== "--tool");
       return runResume(process.cwd(), id, receivingTool);
+    }
+    case "verify": {
+      const claimId = rest[0];
+      if (!claimId) {
+        process.stderr.write("usage: baton verify <claim-id> [handoff-id]\n");
+        process.exitCode = 2;
+        return;
+      }
+      return runVerify(process.cwd(), claimId, rest[1]);
     }
     case "render": {
       const format = rest[0];

@@ -1,25 +1,10 @@
-import { BatonError } from "../../core/errors.ts";
 import { shortId } from "../../core/hash.ts";
 import { ProjectStore } from "../../store/project.ts";
 import { renderResumePrompt, type LineageNode } from "../../render/resume.ts";
 import type { ToolId } from "../../schema/handoff.ts";
+import { resolveHandoffId } from "../resolve.ts";
 
 const MAX_LINEAGE = 8;
-
-/** Resolve a (possibly short) id, or the head when none is given. */
-function resolve(store: ProjectStore, idPrefix: string | undefined): string {
-  if (idPrefix === undefined) {
-    const head = store.config().head;
-    if (head === null) throw new BatonError("NOT_FOUND", "no batons yet — run `baton pass` first");
-    return head;
-  }
-  const matches = store.listHandoffIds().filter((id) => id.startsWith(idPrefix));
-  if (matches.length === 0) throw new BatonError("NOT_FOUND", `no baton matching "${idPrefix}"`);
-  if (matches.length > 1) {
-    throw new BatonError("NOT_FOUND", `ambiguous id "${idPrefix}" (${matches.length} matches)`);
-  }
-  return matches[0]!;
-}
 
 /**
  * `baton resume [id]` — render the resume prompt for a verified handoff.
@@ -30,7 +15,7 @@ function resolve(store: ProjectStore, idPrefix: string | undefined): string {
  */
 export function runResume(cwd: string, idPrefix?: string, receivingTool?: ToolId): void {
   const store = ProjectStore.open(cwd);
-  const id = resolve(store, idPrefix);
+  const id = resolveHandoffId(store, idPrefix);
   const handoff = store.loadHandoff(id); // verifies the hash before we render it
 
   // First-parent chain, nearest first, starting with this handoff.

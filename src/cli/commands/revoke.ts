@@ -1,5 +1,5 @@
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
-import { loadIdentity, requireEd25519Identity } from "../../chain/identity.ts";
+import { loadIdentity } from "../../chain/identity.ts";
 import { revokeAccessOnSui } from "../../chain/sharing.ts";
 import { BatonError } from "../../core/errors.ts";
 import { ProjectStore } from "../../store/project.ts";
@@ -10,9 +10,8 @@ export async function runRevoke(cwd: string, grantee: string, identityPath?: str
   const remote = store.config().remote;
   if (!remote) throw new BatonError("INVALID_STATE", "project is local-only — there is no remote access to revoke");
   const loaded = loadIdentity(identityPath);
-  const { keypair } = requireEd25519Identity(loaded);
   const client = new SuiJsonRpcClient({ network: remote.network, url: remote.rpcUrl });
-  const digest = await revokeAccessOnSui({ client, keypair, remote, grantee });
+  const digest = await revokeAccessOnSui({ client, identity: loaded, remote, grantee });
   ok(`read access revoked for ${grantee}`);
   ok(`Sui transaction: ${digest}`);
 }

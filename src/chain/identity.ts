@@ -212,3 +212,19 @@ export function requireEd25519Identity(loaded: LoadedIdentity): { record: Ed2551
   }
   return loaded;
 }
+
+/** Get the Sui address for any identity type (ED or ZK). */
+export function getIdentityAddress(loaded: LoadedIdentity): string {
+  return loaded.record.address;
+}
+
+/**
+ * Unified way to obtain a signer/keypair when the operation still requires ED.
+ * For zkLogin paths, use signTransactionWithZkLogin from zklogin.ts instead.
+ */
+export function getEd25519Keypair(loaded: LoadedIdentity): Ed25519Keypair {
+  if (loaded.scheme === "ED25519") {
+    return loaded.keypair;
+  }
+  throw new BatonError("INVALID_STATE", "Expected Ed25519 identity but got zkLogin identity.");
+}

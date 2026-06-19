@@ -4,6 +4,9 @@ import { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
 import { BatonError } from "../core/errors.ts";
 import type { RemoteProjectConfig } from "../schema/project.ts";
+import type { LoadedIdentity } from "./identity.ts";
+import { signTransactionWithZkLogin } from "./zklogin.ts";
+import { getEd25519Keypair } from "./identity.ts";
 
 export interface GrantAccessResult {
   digest: string;
@@ -69,17 +72,32 @@ export function extractGrantedAccessCap(
 
 async function execute(
   client: SuiJsonRpcClient,
-  keypair: Ed25519Keypair,
+  loaded: LoadedIdentity,
   transaction: Transaction,
   label: string,
 ): Promise<Awaited<ReturnType<SuiJsonRpcClient["signAndExecuteTransaction"]>>> {
   let response;
   try {
-    response = await client.signAndExecuteTransaction({
-      transaction,
-      signer: keypair,
-      options: { showEffects: true, showObjectChanges: true },
-    });
+    if (loaded.scheme === "ZKLOGIN") {
+      const zkSig = await signTransactionWithZkLogin({
+        session: loaded.session,
+        client,
+        transaction,
+      });
+      const bytes = await transaction.build({ client });
+      response = await client.executeTransactionBlock({
+        transactionBlock: bytes,
+        signature: zkSig,
+        options: { showEffects: true, showObjectChanges: true },
+      });
+    } else {
+      const keypair = getEd25519Keypair(loaded);
+      response = await client.signAndExecuteTransaction({
+        transaction,
+        signer: keypair,
+        options: { showEffects: true, showObjectChanges: true },
+      });
+    }
   } catch (err) {
     throw new BatonError("IO_ERROR", `${label} request failed: ${err instanceof Error ? err.message : String(err)}`, {
       cause: err,
@@ -98,14 +116,14 @@ async function execute(
 
 export async function grantAccessOnSui(input: {
   client: SuiJsonRpcClient;
-  keypair: Ed25519Keypair;
+  identity: LoadedIdentity;
   remote: RemoteProjectConfig;
   grantee: string;
 }): Promise<GrantAccessResult> {
   const grantee = normalizeSuiAddress(input.grantee);
   const response = await execute(
     input.client,
-    input.keypair,
+    input.identity,
     buildGrantAccessTransaction(input.remote, grantee),
     "sharing transaction",
   );
@@ -121,13 +139,13 @@ export async function grantAccessOnSui(input: {
 
 export async function revokeAccessOnSui(input: {
   client: SuiJsonRpcClient;
-  keypair: Ed25519Keypair;
+  identity: LoadedIdentity;
   remote: RemoteProjectConfig;
   grantee: string;
 }): Promise<string> {
   const response = await execute(
     input.client,
-    input.keypair,
+    input.identity,
     buildRevokeAccessTransaction(input.remote, input.grantee),
     "revocation transaction",
   );

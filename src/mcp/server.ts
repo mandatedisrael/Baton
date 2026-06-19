@@ -3,6 +3,7 @@ import { z } from "zod";
 import { projectStatus } from "../core/status.ts";
 import { ProjectStore } from "../store/project.ts";
 import { registerReadTools } from "./read-tools.ts";
+import { registerWriteTools } from "./write-tools.ts";
 
 const StatusOutput = {
   projectId: z.string(),
@@ -39,6 +40,7 @@ export function createBatonMcpServer(projectDir: string): McpServer {
   });
 
   registerReadTools(server, projectDir);
+  registerWriteTools(server, projectDir);
 
   return server;
 }

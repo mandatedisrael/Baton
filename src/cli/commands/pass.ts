@@ -6,7 +6,7 @@ import { applyPatches, type WorkingState } from "../../core/working-state.ts";
 import { ProjectStore } from "../../store/project.ts";
 import type { Attachment, CaptureMode, Fidelity, ToolId } from "../../schema/handoff.ts";
 import { fallbackPatchOps, gatherFallbackSignal } from "../../distiller/fallback.ts";
-import { scrubDeep } from "../../distiller/scrub.ts";
+import { scrub, scrubDeep, type ScrubFinding } from "../../distiller/scrub.ts";
 import { parseClaudeCodeTranscript } from "../../distiller/capture/claude-code.ts";
 import { transcriptAttachment } from "../../distiller/capture/transcript.ts";
 import { transcriptAttachmentId } from "../../distiller/checkpoint.ts";
@@ -40,12 +40,15 @@ export async function runPass(cwd: string, opts: PassOptions = {}): Promise<void
   // Locate the source transcript (if checkpoints recorded one).
   let attachments: Attachment[] | undefined;
   let transcriptText: string | undefined;
+  let transcriptFindings: ScrubFinding[] = [];
   let tool: ToolId = "other";
   let captureMode: CaptureMode = "fallback";
   let model: string | undefined;
   if (cursor.transcriptPath && existsSync(cursor.transcriptPath)) {
     try {
-      transcriptText = readFileSync(cursor.transcriptPath, "utf8");
+      const scrubbedTranscript = scrub(readFileSync(cursor.transcriptPath, "utf8"));
+      transcriptText = scrubbedTranscript.clean;
+      transcriptFindings = scrubbedTranscript.findings;
       const session = parseClaudeCodeTranscript(transcriptText);
       const attId = transcriptAttachmentId(session);
       if (attId) {
@@ -72,8 +75,9 @@ export async function runPass(cwd: string, opts: PassOptions = {}): Promise<void
   );
 
   // Scrub before anything is sealed or re-saved locally.
-  const { value, findings } = scrubDeep(enriched);
+  const { value, findings: stateFindings } = scrubDeep(enriched);
   const scrubbed = value as WorkingState;
+  const findings = [...stateFindings, ...transcriptFindings];
   if (findings.length > 0) {
     warn(`scrubbed secrets before sealing: ${findings.map((f) => `${f.count}× ${f.type}`).join(", ")}`);
   }
@@ -82,7 +86,8 @@ export async function runPass(cwd: string, opts: PassOptions = {}): Promise<void
     scrubbed.mission === "" &&
     scrubbed.decisions.length === 0 &&
     scrubbed.graveyard.length === 0 &&
-    scrubbed.repoMap.touched.length === 0
+    scrubbed.repoMap.touched.length === 0 &&
+    !transcriptText
   ) {
     warn("nothing to capture — clean working tree and empty state; passing an empty baton");
   }
@@ -120,6 +125,9 @@ export async function runPass(cwd: string, opts: PassOptions = {}): Promise<void
   }
 
   const { handoff, id } = finalize(scrubbed, { ...meta, fidelity });
+  if (transcriptText && attachments) {
+    for (const attachment of attachments) store.saveAttachment(attachment, transcriptText);
+  }
   store.saveHandoff(handoff, id);
   store.setHead(id);
   store.saveWorkingState(scrubbed);

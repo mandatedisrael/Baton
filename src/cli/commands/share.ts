@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { grantAccessOnSui } from "../../chain/sharing.ts";
-import { loadIdentity } from "../../chain/identity.ts";
+import { loadIdentity, requireEd25519Identity } from "../../chain/identity.ts";
 import { BatonError } from "../../core/errors.ts";
 import type { ShareInvitation } from "../../schema/invite.ts";
 import { ProjectStore } from "../../store/project.ts";
@@ -13,7 +13,8 @@ export async function runShare(cwd: string, grantee: string, outputPath?: string
   const config = store.config();
   if (!config.remote) throw new BatonError("INVALID_STATE", "project is local-only — register it before sharing");
   if (!config.head) throw new BatonError("INVALID_STATE", "pass and publish at least one baton before sharing");
-  const { keypair } = loadIdentity(identityPath);
+  const loaded = loadIdentity(identityPath);
+  const { keypair } = requireEd25519Identity(loaded);
   const client = new SuiJsonRpcClient({ network: config.remote.network, url: config.remote.rpcUrl });
   const grantedAt = new Date().toISOString();
   const result = await grantAccessOnSui({ client, keypair, remote: config.remote, grantee });

@@ -17,6 +17,7 @@ import { runCheckpoint } from "./commands/checkpoint.ts";
 import { runInstall, runUninstall } from "./commands/install.ts";
 import { runDoctor } from "./commands/doctor.ts";
 import { runVerify } from "./commands/verify.ts";
+import { runQueueStatus } from "./commands/queue.ts";
 import { TOOL_IDS, type ToolId } from "../schema/handoff.ts";
 import { RULES_TARGETS, type RulesFormat } from "../render/rules.ts";
 
@@ -33,6 +34,7 @@ Commands:
   resume [id]  render the resume prompt for a handoff (head if omitted)
   verify <claim-id> [id]
                show the verified source lines behind a distilled claim
+  queue status show crash-safe remote publication progress
   render <fmt> project a handoff into a rules file (${Object.keys(RULES_TARGETS).join(" | ")})
   install      register the Claude Code checkpoint hook for this project
   uninstall    remove the Claude Code checkpoint hook
@@ -113,6 +115,13 @@ function main(argv: string[]): void {
       }
       return runVerify(process.cwd(), claimId, rest[1]);
     }
+    case "queue":
+      if (rest.length > 1 || (rest[0] !== undefined && rest[0] !== "status")) {
+        process.stderr.write("usage: baton queue [status]\n");
+        process.exitCode = 2;
+        return;
+      }
+      return runQueueStatus(process.cwd());
     case "render": {
       const format = rest[0];
       if (!format || !(format in RULES_TARGETS)) {

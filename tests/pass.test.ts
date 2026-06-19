@@ -54,6 +54,9 @@ test("pass persists a scrubbed transcript that survives deletion of the source",
   const handoff = store.loadHandoff(head);
   assert.equal(handoff.meta.captureMode, "transcript");
   assert.equal(handoff.attachments.length, 1);
+  const job = store.loadUploadJob(head);
+  assert.equal(job.status, "pending");
+  assert.deepEqual(job.blobs.map((blob) => blob.kind), ["handoff", "attachment"]);
 
   unlinkSync(transcriptPath);
   const saved = store.loadAttachment(handoff.attachments[0]!).toString("utf8");

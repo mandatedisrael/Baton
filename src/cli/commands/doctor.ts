@@ -47,6 +47,11 @@ export function runDoctor(cwd: string): void {
     store.loadHandoff(head);
     return "resolves and verifies";
   });
+  check("publication queue", () => {
+    const jobs = store.listUploadJobs();
+    const open = jobs.filter((job) => job.status !== "complete").length;
+    return `${jobs.length} job(s), ${open} open`;
+  });
 
   // Capture readiness — surfaced so users can see whether automatic
   // checkpointing is actually wired up, without digging through configs.

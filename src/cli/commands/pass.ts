@@ -14,6 +14,7 @@ import { gradeHandoff } from "../../distiller/grade.ts";
 import { AnthropicClient } from "../../llm/anthropic.ts";
 import { renderReview } from "../../render/review.ts";
 import { confirm, ok, warn } from "../output.ts";
+import { createUploadJob } from "../../chain/queue.ts";
 
 export interface PassOptions {
   /** Show the distillation + change summary and require confirmation before sealing. */
@@ -132,6 +133,14 @@ export async function runPass(cwd: string, opts: PassOptions = {}): Promise<void
   store.setHead(id);
   store.saveWorkingState(scrubbed);
 
+  let queued = false;
+  try {
+    store.enqueueUploadJob(createUploadJob(id, handoff));
+    queued = true;
+  } catch (err) {
+    warn(`baton saved locally, but remote publication was not queued: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   const lineage = handoff.meta.parents.length ? ` ← ${shortId(handoff.meta.parents[0]!)}` : "";
   const touched = handoff.repoMap.touched.length;
   const bits = [
@@ -139,5 +148,5 @@ export async function runPass(cwd: string, opts: PassOptions = {}): Promise<void
     touched > 0 ? `${touched} file(s)` : null,
     handoff.fidelity.score !== null ? `fidelity ${(handoff.fidelity.score * 100).toFixed(0)}%` : null,
   ].filter(Boolean);
-  ok(`baton ${shortId(id)} passed${lineage} · ${bits.join(" · ")} (local-only; anchoring lands in phase 3)`);
+  ok(`baton ${shortId(id)} passed${lineage} · ${bits.join(" · ")}${queued ? " · publication queued locally" : ""}`);
 }

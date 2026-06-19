@@ -17,12 +17,14 @@ import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { BatonError } from "../core/errors.ts";
-import { hashCanonical } from "../core/hash.ts";
+import { hashBytes, hashCanonical } from "../core/hash.ts";
 import { emptyWorkingState, type WorkingState } from "../core/working-state.ts";
-import { parseHandoff, type Handoff } from "../schema/handoff.ts";
+import { parseHandoff, type Attachment, type Handoff } from "../schema/handoff.ts";
 import { isoDatetime, literal, nullable, obj, str } from "../schema/validate.ts";
 import {
   batonDir,
+  attachmentPath,
+  attachmentsDir,
   configPath,
   cursorPath,
   findProjectRoot,
@@ -74,6 +76,7 @@ export class ProjectStore {
       throw new BatonError("ALREADY_INITIALIZED", `already a baton project: ${batonDir(root)}`);
     }
     mkdirSync(handoffsDir(root), { recursive: true });
+    mkdirSync(attachmentsDir(root), { recursive: true });
     mkdirSync(dirname(workingStatePath(root)), { recursive: true });
     const store = new ProjectStore(root);
     store.writeConfig({
@@ -181,6 +184,39 @@ export class ProjectStore {
       .map((f) => f.slice(0, -".json".length));
   }
 
+  // -- attachments -----------------------------------------------------------
+
+  /**
+   * Persist attachment bytes under their content hash. Existing bytes are
+   * verified and reused, making retries idempotent.
+   */
+  saveAttachment(attachment: Attachment, data: Uint8Array | string): void {
+    const bytes = typeof data === "string" ? Buffer.from(data, "utf8") : Buffer.from(data);
+    this.validateAttachmentBytes(attachment, bytes);
+    const path = this.verifiedAttachmentPath(attachment.contentHash);
+    if (existsSync(path)) {
+      this.loadAttachment(attachment);
+      return;
+    }
+    this.writeBytesAtomic(path, bytes);
+  }
+
+  /** Load attachment bytes and loudly refuse missing or tampered content. */
+  loadAttachment(attachment: Attachment): Buffer {
+    const path = this.verifiedAttachmentPath(attachment.contentHash);
+    if (!existsSync(path)) {
+      throw new BatonError("NOT_FOUND", `attachment ${attachment.id} is not available locally`);
+    }
+    let bytes: Buffer;
+    try {
+      bytes = readFileSync(path);
+    } catch (err) {
+      throw new BatonError("IO_ERROR", `failed reading attachment ${attachment.id}`, { cause: err });
+    }
+    this.validateAttachmentBytes(attachment, bytes);
+    return bytes;
+  }
+
   // -- internals ----------------------------------------------------------------
 
   private readJson(path: string): unknown {
@@ -193,6 +229,40 @@ export class ProjectStore {
 
   private writeConfig(config: ProjectConfig): void {
     this.writeJsonAtomic(configPath(this.root), config);
+  }
+
+  private verifiedAttachmentPath(contentHash: string): string {
+    if (!/^[a-f0-9]{64}$/.test(contentHash)) {
+      throw new BatonError("INVALID_HANDOFF", "attachment content hash must be 64 lowercase hex characters");
+    }
+    return attachmentPath(this.root, contentHash);
+  }
+
+  private validateAttachmentBytes(attachment: Attachment, bytes: Uint8Array): void {
+    if (bytes.byteLength !== attachment.bytes) {
+      throw new BatonError(
+        "HASH_MISMATCH",
+        `attachment ${attachment.id} expected ${attachment.bytes} bytes, received ${bytes.byteLength}`,
+      );
+    }
+    const actual = hashBytes(bytes);
+    if (actual !== attachment.contentHash) {
+      throw new BatonError(
+        "HASH_MISMATCH",
+        `attachment ${attachment.id} failed verification (content hashes to ${actual})`,
+      );
+    }
+  }
+
+  private writeBytesAtomic(path: string, value: Uint8Array): void {
+    const tmp = `${path}.tmp`;
+    try {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(tmp, value, { mode: 0o600 });
+      renameSync(tmp, path);
+    } catch (err) {
+      throw new BatonError("IO_ERROR", `failed writing ${path}`, { cause: err });
+    }
   }
 
   private writeJsonAtomic(path: string, value: unknown): void {

@@ -6,6 +6,7 @@
  *     state/working.json rolling WorkingState (local, private)
  *     state/cursor.json  checkpoint cursor (last distilled transcript position)
  *     handoffs/<id>.json sealed commits (local until anchored, phase 3)
+ *     attachments/<hash> raw source bytes, addressed and verified by content
  *
  * `findProjectRoot` walks up from cwd like git does, so every command works
  * from any subdirectory.
@@ -37,6 +38,14 @@ export function handoffsDir(root: string): string {
 
 export function handoffPath(root: string, id: string): string {
   return join(handoffsDir(root), `${id}.json`);
+}
+
+export function attachmentsDir(root: string): string {
+  return join(batonDir(root), "attachments");
+}
+
+export function attachmentPath(root: string, contentHash: string): string {
+  return join(attachmentsDir(root), contentHash);
 }
 
 /** Walk up from `start` looking for a .baton directory. Null if none. */

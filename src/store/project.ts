@@ -33,6 +33,7 @@ import {
   attachmentsDir,
   configPath,
   cursorPath,
+  encryptedPayloadPath,
   findProjectRoot,
   handoffPath,
   handoffsDir,
@@ -263,6 +264,57 @@ export class ProjectStore {
       .filter((name) => name.endsWith(".json"))
       .map((name) => this.loadUploadJob(name.slice(0, -".json".length)))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  saveEncryptedPayload(job: UploadJob, blobId: string, data: Uint8Array): void {
+    const blob = job.blobs.find((item) => item.id === blobId);
+    if (!blob) throw new BatonError("NOT_FOUND", `upload job has no blob ${blobId}`);
+    if (blob.status === "pending" || blob.encryptedHash === null) {
+      throw new BatonError("INVALID_STATE", `blob ${blobId} has not been encrypted`);
+    }
+    const actual = hashBytes(data);
+    if (actual !== blob.encryptedHash) {
+      throw new BatonError(
+        "HASH_MISMATCH",
+        `encrypted blob ${blobId} hashes to ${actual}, expected ${blob.encryptedHash}`,
+      );
+    }
+    this.writeBytesAtomic(
+      encryptedPayloadPath(
+        this.root,
+        this.verifiedContentId(job.handoffId),
+        this.verifiedContentId(blob.contentHash),
+      ),
+      data,
+    );
+  }
+
+  loadEncryptedPayload(job: UploadJob, blobId: string): Buffer {
+    const blob = job.blobs.find((item) => item.id === blobId);
+    if (!blob) throw new BatonError("NOT_FOUND", `upload job has no blob ${blobId}`);
+    if (blob.status === "pending" || blob.encryptedHash === null) {
+      throw new BatonError("INVALID_STATE", `blob ${blobId} has not been encrypted`);
+    }
+    const path = encryptedPayloadPath(
+      this.root,
+      this.verifiedContentId(job.handoffId),
+      this.verifiedContentId(blob.contentHash),
+    );
+    if (!existsSync(path)) throw new BatonError("NOT_FOUND", `encrypted payload ${blobId} is missing`);
+    let data: Buffer;
+    try {
+      data = readFileSync(path);
+    } catch (err) {
+      throw new BatonError("IO_ERROR", `failed reading encrypted payload ${blobId}`, { cause: err });
+    }
+    const actual = hashBytes(data);
+    if (actual !== blob.encryptedHash) {
+      throw new BatonError(
+        "HASH_MISMATCH",
+        `encrypted payload ${blobId} failed verification (content hashes to ${actual})`,
+      );
+    }
+    return data;
   }
 
   saveRemoteSidecar(sidecar: RemoteSidecar): void {

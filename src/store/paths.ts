@@ -58,6 +58,14 @@ export function uploadJobPath(root: string, handoffId: string): string {
   return join(queueDir(root), `${handoffId}.json`);
 }
 
+export function encryptedPayloadsDir(root: string, handoffId: string): string {
+  return join(queueDir(root), "payloads", handoffId);
+}
+
+export function encryptedPayloadPath(root: string, handoffId: string, contentHash: string): string {
+  return join(encryptedPayloadsDir(root, handoffId), `${contentHash}.seal`);
+}
+
 export function remoteDir(root: string): string {
   return join(batonDir(root), "remote");
 }

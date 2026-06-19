@@ -1,11 +1,12 @@
 #[test_only]
 module baton_core::memory_tests;
 
-use baton_core::memory::{Self, OwnerCap, ProjectMemory};
+use baton_core::memory::{Self, AccessCap, OwnerCap, ProjectMemory};
 use sui::test_scenario;
 
 const OWNER: address = @0xA11CE;
 const NEXT_OWNER: address = @0xB0B;
+const READER: address = @0xCAFE;
 
 fun hash(byte: u8): vector<u8> {
     let mut value = vector[];
@@ -112,6 +113,62 @@ fun seal_policy_binds_project_owner_and_manifest() {
 
     test_scenario::return_shared(project);
     scenario.return_to_sender(cap);
+    scenario.end();
+}
+
+#[test]
+fun delegated_access_grant_revoke_and_regrant() {
+    let mut scenario = test_scenario::begin(OWNER);
+    let (mut project, owner_cap) = create(&mut scenario);
+    let h1 = hash(1);
+    anchor(&mut project, &owner_cap, h1, b"main", vector[]);
+    let mut identity = object::id(&project).to_bytes();
+    identity.append(h1);
+
+    memory::grant_access(&mut project, &owner_cap, READER, scenario.ctx());
+    assert!(memory::has_active_access(&project, READER));
+    test_scenario::return_shared(project);
+    scenario.return_to_sender(owner_cap);
+
+    scenario.next_tx(READER);
+    let stale_cap = scenario.take_from_sender<AccessCap>();
+    let project = scenario.take_shared<ProjectMemory>();
+    assert!(memory::access_grantee(&stale_cap) == READER);
+    assert!(memory::access_generation(&stale_cap) == 1);
+    assert!(memory::check_access_policy_for_testing(&identity, &project, &stale_cap, READER));
+    assert!(!memory::check_access_policy_for_testing(&identity, &project, &stale_cap, NEXT_OWNER));
+    test_scenario::return_shared(project);
+    scenario.return_to_sender(stale_cap);
+
+    scenario.next_tx(OWNER);
+    let mut project = scenario.take_shared<ProjectMemory>();
+    let owner_cap = scenario.take_from_sender<OwnerCap>();
+    memory::revoke_access(&mut project, &owner_cap, READER);
+    assert!(!memory::has_active_access(&project, READER));
+    test_scenario::return_shared(project);
+    scenario.return_to_sender(owner_cap);
+
+    scenario.next_tx(READER);
+    let stale_cap = scenario.take_from_sender<AccessCap>();
+    let project = scenario.take_shared<ProjectMemory>();
+    assert!(!memory::check_access_policy_for_testing(&identity, &project, &stale_cap, READER));
+    test_scenario::return_shared(project);
+    scenario.return_to_sender(stale_cap);
+
+    scenario.next_tx(OWNER);
+    let mut project = scenario.take_shared<ProjectMemory>();
+    let owner_cap = scenario.take_from_sender<OwnerCap>();
+    memory::grant_access(&mut project, &owner_cap, READER, scenario.ctx());
+    test_scenario::return_shared(project);
+    scenario.return_to_sender(owner_cap);
+
+    scenario.next_tx(READER);
+    let fresh_cap = scenario.take_from_sender<AccessCap>();
+    let project = scenario.take_shared<ProjectMemory>();
+    assert!(memory::access_generation(&fresh_cap) == 2);
+    assert!(memory::check_access_policy_for_testing(&identity, &project, &fresh_cap, READER));
+    test_scenario::return_shared(project);
+    scenario.return_to_sender(fresh_cap);
     scenario.end();
 }
 

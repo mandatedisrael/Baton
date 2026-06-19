@@ -35,6 +35,9 @@ const E_INVALID_ATTACHMENT: u64 = 15;
 const E_NO_BRANCH: u64 = 16;
 const E_NO_MANIFEST: u64 = 17;
 const E_NO_SEAL_ACCESS: u64 = 18;
+const E_INVALID_GRANTEE: u64 = 19;
+const E_ACCESS_ALREADY_ACTIVE: u64 = 20;
+const E_ACCESS_NOT_ACTIVE: u64 = 21;
 
 public struct ProjectMemory has key {
     id: UID,
@@ -48,6 +51,25 @@ public struct ProjectMemory has key {
 public struct OwnerCap has key {
     id: UID,
     project: ID,
+}
+
+/// Address-bound delegated read access. It deliberately lacks `store`, so it
+/// cannot be transferred outside this module. Revocation is enforced through
+/// the current AccessRecord rather than by requiring the object back.
+public struct AccessCap has key {
+    id: UID,
+    project: ID,
+    grantee: address,
+    generation: u64,
+}
+
+public struct AccessKey has copy, drop, store {
+    grantee: address,
+}
+
+public struct AccessRecord has store {
+    generation: u64,
+    active: bool,
 }
 
 public struct ManifestKey has copy, drop, store {
@@ -100,6 +122,19 @@ public struct OwnershipTransferred has copy, drop {
     new_owner: address,
 }
 
+public struct AccessGranted has copy, drop {
+    project: ID,
+    grantee: address,
+    generation: u64,
+    capability: ID,
+}
+
+public struct AccessRevoked has copy, drop {
+    project: ID,
+    grantee: address,
+    generation: u64,
+}
+
 public fun create_project(project_id: vector<u8>, ctx: &mut TxContext) {
     assert!(!project_id.is_empty() && project_id.length() <= MAX_PROJECT_ID_LENGTH, E_INVALID_PROJECT_ID);
     let owner = ctx.sender();
@@ -131,6 +166,65 @@ public fun transfer_ownership(
         new_owner,
     });
     transfer::transfer(cap, new_owner);
+}
+
+/// Mint a fresh, address-bound read capability. Re-granting after revocation
+/// advances the generation, ensuring every previously issued cap stays stale.
+public fun grant_access(
+    project: &mut ProjectMemory,
+    owner_cap: &OwnerCap,
+    grantee: address,
+    ctx: &mut TxContext,
+) {
+    assert_owner(project, owner_cap);
+    assert!(grantee != @0x0 && grantee != project.owner, E_INVALID_GRANTEE);
+    let key = AccessKey { grantee };
+    let generation;
+    if (df::exists(&project.id, key)) {
+        let record = df::borrow_mut<AccessKey, AccessRecord>(&mut project.id, key);
+        assert!(!record.active, E_ACCESS_ALREADY_ACTIVE);
+        record.generation = record.generation + 1;
+        record.active = true;
+        generation = record.generation;
+    } else {
+        generation = 1;
+        df::add(&mut project.id, key, AccessRecord { generation, active: true });
+    };
+    let access_cap = AccessCap {
+        id: object::new(ctx),
+        project: object::id(project),
+        grantee,
+        generation,
+    };
+    let capability = object::id(&access_cap);
+    event::emit(AccessGranted {
+        project: object::id(project),
+        grantee,
+        generation,
+        capability,
+    });
+    transfer::transfer(access_cap, grantee);
+}
+
+/// Revoke an address without needing possession of its AccessCap.
+public fun revoke_access(
+    project: &mut ProjectMemory,
+    owner_cap: &OwnerCap,
+    grantee: address,
+) {
+    assert_owner(project, owner_cap);
+    let project_id = object::id(project);
+    let key = AccessKey { grantee };
+    assert!(df::exists(&project.id, key), E_ACCESS_NOT_ACTIVE);
+    let record = df::borrow_mut<AccessKey, AccessRecord>(&mut project.id, key);
+    assert!(record.active, E_ACCESS_NOT_ACTIVE);
+    record.active = false;
+    let generation = record.generation;
+    event::emit(AccessRevoked {
+        project: project_id,
+        grantee,
+        generation,
+    });
 }
 
 public fun anchor_handoff(
@@ -268,9 +362,50 @@ fun check_seal_policy(id: &vector<u8>, project: &ProjectMemory, cap: &OwnerCap):
     df::exists(&project.id, ManifestKey { hash: content_hash })
 }
 
+fun check_access_policy(
+    id: &vector<u8>,
+    project: &ProjectMemory,
+    cap: &AccessCap,
+    sender: address,
+): bool {
+    if (
+        project.version != VERSION ||
+        cap.project != object::id(project) ||
+        cap.grantee != sender ||
+        id.length() != SEAL_ID_LENGTH
+    ) {
+        return false
+    };
+    let key = AccessKey { grantee: sender };
+    if (!df::exists(&project.id, key)) return false;
+    let record = df::borrow<AccessKey, AccessRecord>(&project.id, key);
+    if (!record.active || record.generation != cap.generation) return false;
+
+    let project_bytes = object::id(project).to_bytes();
+    let mut content_hash = vector[];
+    let mut i = 0;
+    while (i < HASH_LENGTH) {
+        if (id[i] != project_bytes[i]) return false;
+        content_hash.push_back(id[i + HASH_LENGTH]);
+        i = i + 1;
+    };
+    df::exists(&project.id, ManifestKey { hash: content_hash })
+}
+
 /// Evaluated by Seal key servers. Owned OwnerCap input proves current ownership.
 entry fun seal_approve(id: vector<u8>, project: &ProjectMemory, cap: &OwnerCap) {
     assert!(check_seal_policy(&id, project, cap), E_NO_SEAL_ACCESS);
+}
+
+/// Seal approval path for delegated readers. The transaction sender must be
+/// the grantee recorded in both the cap and the live project access record.
+entry fun seal_approve_shared(
+    id: vector<u8>,
+    project: &ProjectMemory,
+    cap: &AccessCap,
+    ctx: &TxContext,
+) {
+    assert!(check_access_policy(&id, project, cap, ctx.sender()), E_NO_SEAL_ACCESS);
 }
 
 #[test_only]
@@ -282,10 +417,27 @@ public fun check_seal_policy_for_testing(
     check_seal_policy(id, project, cap)
 }
 
+#[test_only]
+public fun check_access_policy_for_testing(
+    id: &vector<u8>,
+    project: &ProjectMemory,
+    cap: &AccessCap,
+    sender: address,
+): bool {
+    check_access_policy(id, project, cap, sender)
+}
+
 public fun version(project: &ProjectMemory): u64 { project.version }
 public fun project_id(project: &ProjectMemory): &vector<u8> { &project.project_id }
 public fun owner(project: &ProjectMemory): address { project.owner }
 public fun handoff_count(project: &ProjectMemory): u64 { project.handoff_count }
+public fun access_grantee(cap: &AccessCap): address { cap.grantee }
+public fun access_generation(cap: &AccessCap): u64 { cap.generation }
+
+public fun has_active_access(project: &ProjectMemory, grantee: address): bool {
+    let key = AccessKey { grantee };
+    df::exists(&project.id, key) && df::borrow<AccessKey, AccessRecord>(&project.id, key).active
+}
 
 public fun has_manifest(project: &ProjectMemory, content_hash: vector<u8>): bool {
     df::exists(&project.id, ManifestKey { hash: content_hash })

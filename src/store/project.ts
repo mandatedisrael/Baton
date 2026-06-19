@@ -20,6 +20,12 @@ import { BatonError } from "../core/errors.ts";
 import { hashBytes, hashCanonical } from "../core/hash.ts";
 import { emptyWorkingState, type WorkingState } from "../core/working-state.ts";
 import { parseHandoff, type Attachment, type Handoff } from "../schema/handoff.ts";
+import {
+  parseRemoteSidecar,
+  parseUploadJob,
+  type RemoteSidecar,
+  type UploadJob,
+} from "../schema/remote.ts";
 import { isoDatetime, literal, nullable, obj, str } from "../schema/validate.ts";
 import {
   batonDir,
@@ -30,6 +36,10 @@ import {
   findProjectRoot,
   handoffPath,
   handoffsDir,
+  queueDir,
+  remoteDir,
+  remoteSidecarPath,
+  uploadJobPath,
   workingStatePath,
 } from "./paths.ts";
 
@@ -77,6 +87,8 @@ export class ProjectStore {
     }
     mkdirSync(handoffsDir(root), { recursive: true });
     mkdirSync(attachmentsDir(root), { recursive: true });
+    mkdirSync(queueDir(root), { recursive: true });
+    mkdirSync(remoteDir(root), { recursive: true });
     mkdirSync(dirname(workingStatePath(root)), { recursive: true });
     const store = new ProjectStore(root);
     store.writeConfig({
@@ -217,6 +229,58 @@ export class ProjectStore {
     return bytes;
   }
 
+  // -- remote publication queue ---------------------------------------------
+
+  saveUploadJob(job: UploadJob): void {
+    const parsed = parseUploadJob(job);
+    this.writeJsonAtomic(uploadJobPath(this.root, parsed.handoffId), parsed);
+  }
+
+  /** Create a queue entry without resetting progress from an earlier attempt. */
+  enqueueUploadJob(job: UploadJob): UploadJob {
+    const parsed = parseUploadJob(job);
+    const path = uploadJobPath(this.root, parsed.handoffId);
+    if (existsSync(path)) return this.loadUploadJob(parsed.handoffId);
+    this.writeJsonAtomic(path, parsed);
+    return parsed;
+  }
+
+  loadUploadJob(handoffId: string): UploadJob {
+    const path = uploadJobPath(this.root, this.verifiedContentId(handoffId));
+    if (!existsSync(path)) throw new BatonError("NOT_FOUND", `no upload job for baton ${handoffId}`);
+    try {
+      return parseUploadJob(this.readJson(path));
+    } catch (err) {
+      if (err instanceof BatonError) throw err;
+      throw new BatonError("INVALID_STATE", `upload job ${handoffId} is invalid`, { cause: err });
+    }
+  }
+
+  listUploadJobs(): UploadJob[] {
+    const dir = queueDir(this.root);
+    if (!existsSync(dir)) return [];
+    return readdirSync(dir)
+      .filter((name) => name.endsWith(".json"))
+      .map((name) => this.loadUploadJob(name.slice(0, -".json".length)))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  saveRemoteSidecar(sidecar: RemoteSidecar): void {
+    const parsed = parseRemoteSidecar(sidecar);
+    this.writeJsonAtomic(remoteSidecarPath(this.root, parsed.handoffId), parsed);
+  }
+
+  loadRemoteSidecar(handoffId: string): RemoteSidecar {
+    const path = remoteSidecarPath(this.root, this.verifiedContentId(handoffId));
+    if (!existsSync(path)) throw new BatonError("NOT_FOUND", `baton ${handoffId} has no remote publication`);
+    try {
+      return parseRemoteSidecar(this.readJson(path));
+    } catch (err) {
+      if (err instanceof BatonError) throw err;
+      throw new BatonError("INVALID_STATE", `remote metadata for ${handoffId} is invalid`, { cause: err });
+    }
+  }
+
   // -- internals ----------------------------------------------------------------
 
   private readJson(path: string): unknown {
@@ -232,10 +296,14 @@ export class ProjectStore {
   }
 
   private verifiedAttachmentPath(contentHash: string): string {
-    if (!/^[a-f0-9]{64}$/.test(contentHash)) {
-      throw new BatonError("INVALID_HANDOFF", "attachment content hash must be 64 lowercase hex characters");
+    return attachmentPath(this.root, this.verifiedContentId(contentHash));
+  }
+
+  private verifiedContentId(value: string): string {
+    if (!/^[a-f0-9]{64}$/.test(value)) {
+      throw new BatonError("INVALID_HANDOFF", "content id must be 64 lowercase hex characters");
     }
-    return attachmentPath(this.root, contentHash);
+    return value;
   }
 
   private validateAttachmentBytes(attachment: Attachment, bytes: Uint8Array): void {

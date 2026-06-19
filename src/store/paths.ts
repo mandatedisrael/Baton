@@ -7,6 +7,8 @@
  *     state/cursor.json  checkpoint cursor (last distilled transcript position)
  *     handoffs/<id>.json sealed commits (local until anchored, phase 3)
  *     attachments/<hash> raw source bytes, addressed and verified by content
+ *     queue/<id>.json    crash-safe remote publication jobs
+ *     remote/<id>.json   completed Walrus + Sui publication metadata
  *
  * `findProjectRoot` walks up from cwd like git does, so every command works
  * from any subdirectory.
@@ -46,6 +48,22 @@ export function attachmentsDir(root: string): string {
 
 export function attachmentPath(root: string, contentHash: string): string {
   return join(attachmentsDir(root), contentHash);
+}
+
+export function queueDir(root: string): string {
+  return join(batonDir(root), "queue");
+}
+
+export function uploadJobPath(root: string, handoffId: string): string {
+  return join(queueDir(root), `${handoffId}.json`);
+}
+
+export function remoteDir(root: string): string {
+  return join(batonDir(root), "remote");
+}
+
+export function remoteSidecarPath(root: string, handoffId: string): string {
+  return join(remoteDir(root), `${handoffId}.json`);
 }
 
 /** Walk up from `start` looking for a .baton directory. Null if none. */

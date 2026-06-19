@@ -4,6 +4,9 @@ import { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiObjectId } from "@mysten/sui/utils";
 import { BatonError } from "../core/errors.ts";
 import { hashCanonical } from "../core/hash.ts";
+import type { LoadedIdentity } from "./identity.ts";
+import { signTransactionWithZkLogin } from "./zklogin.ts";
+import { getEd25519Keypair } from "./identity.ts";
 import { CAPTURE_MODES, TOOL_IDS, type Handoff } from "../schema/handoff.ts";
 import type { RemoteProjectConfig } from "../schema/project.ts";
 import { parseUploadJob, type RemoteSidecar, type UploadJob } from "../schema/remote.ts";
@@ -142,7 +145,8 @@ async function existingAnchorDigest(
 
 async function submitAnchor(input: {
   client: SuiJsonRpcClient;
-  keypair: Ed25519Keypair;
+  keypair?: Ed25519Keypair;
+  identity?: LoadedIdentity;
   remote: RemoteProjectConfig;
   handoffId: string;
   handoff: Handoff;
@@ -152,11 +156,27 @@ async function submitAnchor(input: {
   const existing = await existingAnchorDigest(input.client, input.remote, input.handoffId, handoffBlobId);
   if (existing) return existing;
   const transaction = buildAnchorTransaction(input);
-  const response = await input.client.signAndExecuteTransaction({
-    transaction,
-    signer: input.keypair,
-    options: { showEffects: true },
-  });
+  let response;
+  if (input.identity && input.identity.scheme === "ZKLOGIN") {
+    const zkSig = await signTransactionWithZkLogin({
+      session: input.identity.session,
+      client: input.client,
+      transaction,
+    });
+    const bytes = await transaction.build({ client: input.client });
+    response = await input.client.executeTransactionBlock({
+      transactionBlock: bytes,
+      signature: zkSig,
+      options: { showEffects: true },
+    });
+  } else {
+    const kp = input.keypair ?? getEd25519Keypair(input.identity!);
+    response = await input.client.signAndExecuteTransaction({
+      transaction,
+      signer: kp,
+      options: { showEffects: true },
+    });
+  }
   if (response.effects?.status.status !== "success") {
     throw new BatonError("IO_ERROR", `Sui anchoring failed: ${response.effects?.status.error ?? "unknown error"}`);
   }
@@ -168,7 +188,8 @@ export async function anchorQueuedJob(input: {
   store: ProjectStore;
   handoffId: string;
   client: SuiJsonRpcClient;
-  keypair: Ed25519Keypair;
+  keypair?: Ed25519Keypair;
+  identity?: LoadedIdentity;
   remote: RemoteProjectConfig;
   now?: Date;
 }): Promise<{ job: UploadJob; sidecar: RemoteSidecar | null }> {

@@ -38,7 +38,7 @@ Usage: baton <command>
 
 Commands:
   init         initialize a baton project in the current directory
-  login        create or load the user's protected Sui identity (use --zk for Google zkLogin)
+  login        create or load the user's protected Sui identity (--zk for Google zkLogin with real address)
   faucet       fund that identity from the official Testnet faucet
   fund-storage exchange Testnet SUI for WAL storage funds
   register     register this project on Sui Testnet

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { ensureHandoffAvailable } from "../src/cli/remote.ts";
 import { finalize } from "../src/core/finalize.ts";
 import { ProjectStore } from "../src/store/project.ts";
+import { hashBytes } from "../src/core/hash.ts";
 
 let root: string;
 beforeEach(() => { root = mkdtempSync(join(tmpdir(), "baton-remote-command-test-")); });
@@ -47,4 +48,33 @@ test("ensureHandoffAvailable recovers only a genuinely missing baton", async () 
   });
   assert.equal(requested, id);
   assert.deepEqual(handoff, result.handoff);
+});
+
+test("ensureHandoffAvailable repairs a missing attachment", async () => {
+  const store = ProjectStore.init(root);
+  const source = Buffer.from("source");
+  const attachment = {
+    id: "transcript-1",
+    kind: "transcript" as const,
+    contentHash: hashBytes(source),
+    bytes: source.length,
+    blobRef: null,
+  };
+  const result = finalize(store.loadWorkingState(), {
+    projectId: store.config().projectId,
+    author: "test",
+    tool: "other",
+    captureMode: "transcript",
+    parents: [],
+    attachments: [attachment],
+  });
+  store.saveHandoff(result.handoff, result.id);
+  let recovered = false;
+  await ensureHandoffAvailable(store, result.id, async () => {
+    recovered = true;
+    store.saveAttachment(attachment, source);
+    return result.handoff;
+  });
+  assert.equal(recovered, true);
+  assert.deepEqual(store.loadAttachment(attachment), source);
 });

@@ -16,7 +16,16 @@ export async function ensureHandoffAvailable(
   recoverer: HandoffRecoverer,
 ): Promise<Handoff> {
   try {
-    return store.loadHandoff(id);
+    const handoff = store.loadHandoff(id);
+    for (const attachment of handoff.attachments) {
+      try {
+        store.loadAttachment(attachment);
+      } catch (err) {
+        if (err instanceof BatonError && err.code === "NOT_FOUND") return recoverer(id);
+        throw err;
+      }
+    }
+    return handoff;
   } catch (err) {
     if (!(err instanceof BatonError) || err.code !== "NOT_FOUND") throw err;
   }

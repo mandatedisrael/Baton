@@ -16,7 +16,8 @@
   "files": [
     "dist",
     "README.md",
-    "docs/mcp.md"
+    "docs/mcp.md",
+    "docs/sponsor-operations.md"
   ],
   "engines": {
     "node": ">=22.18"

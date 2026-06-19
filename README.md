@@ -192,7 +192,9 @@ baton-sponsor invite --state /var/lib/baton/sponsor.json --ttl-hours 24 \
 baton-sponsor serve --state /var/lib/baton/sponsor.json --identity /secure/sponsor-identity.json
 ```
 
-The service binds to `127.0.0.1`, signs only Baton's constrained Testnet `create_project` transaction, reserves a concrete gas coin per pending invitation, verifies the user's signature before spending, and never receives the user's private key. File-backed state operations are atomically serialized across the live daemon and operator processes. Operators can inspect invitation status with `baton-sponsor list [--json]`, revoke an unused invitation with `baton-sponsor revoke --id <id>`, and remove expired or revoked records with `baton-sponsor prune`; completed results remain as durable audit records. Baton does not currently operate a public sponsor endpoint.
+The service binds to `127.0.0.1`, signs only Baton's constrained Testnet `create_project` transaction, reserves a concrete gas coin per pending invitation, verifies the user's signature before spending, and never receives the user's private key. File-backed state operations are atomically serialized across the live daemon and operator processes. Operators can inspect invitation status with `baton-sponsor list [--json]`, revoke an unused invitation with `baton-sponsor revoke --id <id>`, and remove expired or revoked records with `baton-sponsor prune`; completed results remain as durable audit records.
+
+For external operation, `serve` also provides chain-aware `/ready`, process-only `/health`, counts-only Prometheus `/metrics`, trusted-proxy client throttling, and configurable daily/concurrent liability caps. See the packaged [sponsor operations runbook](docs/sponsor-operations.md) for TLS routing, systemd hardening, monitoring, backups, and incident response. Baton does not currently operate a public sponsor endpoint.
 
 With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are graded for fidelity. Without it, Baton still works: checkpoints wait, and `baton pass` produces a useful fallback baton from your git working tree. `baton doctor` tells you exactly what's wired up.
 

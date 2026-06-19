@@ -138,3 +138,11 @@ On 2026-06-19, a fresh invitation was pre-bound to a specific zero-balance Baton
 The successful transaction has two signatures, records the bound user as sender, charges the sponsor as gas owner, and leaves the user with no SUI coins. The sponsor state contains the invitation ID, recipient, project ID, request ID, and result digest—but only a SHA-256 hash of the bearer token. Transaction-scoped file locking serializes live HTTP and operator CLI mutations, preventing concurrent processes from losing invitation updates or double-reserving the same gas coin.
 
 This proves the local operator-control implementation against live Testnet infrastructure. It does not claim an Internet-facing deployment, managed TLS, monitoring, denial-of-service resilience, or production abuse economics.
+
+## Live sponsor readiness and liability-control evidence
+
+On 2026-06-19, the hardened daemon started against the funded Testnet sponsor and the durable bound-invitation state above with a daily limit of 5, active-reservation limit of 2, and per-client request limit of 4. `/ready` reached Sui and returned `200` only after finding an unreserved coin that could cover the fixed registration budget. `/metrics` reported one completed registration that UTC day, zero active reservations, and the configured limits without exposing addresses, tokens, invitation IDs, projects, or transaction digests.
+
+Five invalid registration requests were sent through the trusted-proxy path for one documentation-only client IP: four reached validation and the fifth received `429`. A different client IP remained independent and reached validation. The resulting counters recorded five rejected validation requests and one rate-limited request. Health and metrics probes did not consume the registration request allowance.
+
+This proves the chain-aware readiness, proxy-client isolation, metrics, and configured liability controls on the real Testnet sponsor process. TLS termination, public DNS, Internet traffic, external monitoring, host hardening, and abuse response remain deployment work and are not claimed here.

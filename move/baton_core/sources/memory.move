@@ -273,6 +273,15 @@ entry fun seal_approve(id: vector<u8>, project: &ProjectMemory, cap: &OwnerCap) 
     assert!(check_seal_policy(&id, project, cap), E_NO_SEAL_ACCESS);
 }
 
+#[test_only]
+public fun check_seal_policy_for_testing(
+    id: &vector<u8>,
+    project: &ProjectMemory,
+    cap: &OwnerCap,
+): bool {
+    check_seal_policy(id, project, cap)
+}
+
 public fun version(project: &ProjectMemory): u64 { project.version }
 public fun project_id(project: &ProjectMemory): &vector<u8> { &project.project_id }
 public fun owner(project: &ProjectMemory): address { project.owner }

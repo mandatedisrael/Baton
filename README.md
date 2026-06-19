@@ -142,7 +142,7 @@ Different tools expose different ground truth, so Baton has one protocol with se
 Requires **Node ≥ 22.18** (runs TypeScript natively). The pure core has zero runtime dependencies; network adapters use the official Mysten SDKs.
 
 ```sh
-npm install          # dev deps only (typescript, @types/node)
+npm install          # install the CLI, MCP, and network SDK dependencies
 npm test
 ```
 
@@ -190,6 +190,17 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 | `baton render <claude-md\|agents-md\|cursorrules> [id] [--write]` | Project a baton into a per-tool rules file. |
 | `baton install` / `uninstall` | Add or remove the Claude Code checkpoint hook. |
 | `baton doctor` | Diagnose the install and verify local batons. |
+
+### MCP server
+
+Install the checkout globally, then point any stdio-compatible MCP client at the project it may access:
+
+```sh
+npm install -g .
+baton-mcp --project /absolute/path/to/project
+```
+
+The server exposes verified status, log, search, show, resume, and citation tools plus guarded self-report checkpoint and pass tools. Each server process is pinned to one project root; `baton_pass` requires explicit confirmation. See [docs/mcp.md](docs/mcp.md) for tool contracts, Codex configuration, generic client configuration, and safety behavior.
 
 ---
 

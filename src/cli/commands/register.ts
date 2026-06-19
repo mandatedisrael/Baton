@@ -4,6 +4,7 @@ import {
   BATON_CORE_TESTNET_PACKAGE,
   TESTNET_RPC_URL,
   TESTNET_SEAL,
+  TESTNET_WALRUS,
 } from "../../chain/networks.ts";
 import { registerProjectOnSui } from "../../chain/registration.ts";
 import { BatonError } from "../../core/errors.ts";
@@ -56,6 +57,7 @@ export async function runRegister(cwd: string, options: RegisterOptions = {}): P
     registrationTx: result.digest,
     registeredAt,
     seal: TESTNET_SEAL,
+    walrus: TESTNET_WALRUS,
   });
   ok(`project registered and verified: ${result.projectObjectId}`);
 }

@@ -16,3 +16,11 @@ export const TESTNET_SEAL: RemoteProjectConfig["seal"] = {
     },
   ],
 };
+
+/** Official Testnet upload relay with bounded SUI tip exposure. */
+export const TESTNET_WALRUS: RemoteProjectConfig["walrus"] = {
+  epochs: 3,
+  deletable: false,
+  uploadRelayUrl: "https://upload-relay.testnet.walrus.space",
+  maxTipMist: 1_000,
+};

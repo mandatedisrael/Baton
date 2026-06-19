@@ -21,6 +21,12 @@ export interface RemoteProjectConfig {
     threshold: number;
     serverConfigs: PublicKeyServerConfig[];
   };
+  walrus: {
+    epochs: number;
+    deletable: boolean;
+    uploadRelayUrl: string;
+    maxTipMist: number;
+  };
 }
 
 export interface ProjectConfig {
@@ -72,6 +78,7 @@ function parseRemote(v: unknown, path: string): RemoteProjectConfig {
     "registrationTx",
     "registeredAt",
     "seal",
+    "walrus",
   ]);
   const sealRaw = obj(r.seal, `${path}.seal`, ["threshold", "serverConfigs"]);
   const serverConfigs = arr(sealRaw.serverConfigs, `${path}.seal.serverConfigs`, parseKeyServer);
@@ -80,6 +87,21 @@ function parseRemote(v: unknown, path: string): RemoteProjectConfig {
   const totalWeight = serverConfigs.reduce((sum, server) => sum + server.weight, 0);
   if (threshold > totalWeight) {
     throw new ValidationError(`${path}.seal.threshold`, `cannot exceed total server weight ${totalWeight}`);
+  }
+  // Remote configs written before Walrus transport shipped migrate to the
+  // canonical Testnet relay policy; no credentials or private state are added.
+  const walrusRaw = obj(r.walrus ?? {
+    epochs: 3,
+    deletable: false,
+    uploadRelayUrl: "https://upload-relay.testnet.walrus.space",
+    maxTipMist: 1_000,
+  }, `${path}.walrus`, ["epochs", "deletable", "uploadRelayUrl", "maxTipMist"]);
+  if (typeof walrusRaw.deletable !== "boolean") {
+    throw new ValidationError(`${path}.walrus.deletable`, "expected boolean");
+  }
+  const uploadRelayUrl = httpUrl(walrusRaw.uploadRelayUrl, `${path}.walrus.uploadRelayUrl`);
+  if (new URL(uploadRelayUrl).protocol !== "https:") {
+    throw new ValidationError(`${path}.walrus.uploadRelayUrl`, "expected an https URL");
   }
   return {
     network: oneOf(r.network, `${path}.network`, SUI_NETWORKS),
@@ -90,6 +112,12 @@ function parseRemote(v: unknown, path: string): RemoteProjectConfig {
     registrationTx: str(r.registrationTx, `${path}.registrationTx`, { min: 1 }),
     registeredAt: isoDatetime(r.registeredAt, `${path}.registeredAt`),
     seal: { threshold, serverConfigs },
+    walrus: {
+      epochs: num(walrusRaw.epochs, `${path}.walrus.epochs`, { int: true, min: 1, max: 53 }),
+      deletable: walrusRaw.deletable,
+      uploadRelayUrl,
+      maxTipMist: num(walrusRaw.maxTipMist, `${path}.walrus.maxTipMist`, { int: true, min: 0 }),
+    },
   };
 }
 

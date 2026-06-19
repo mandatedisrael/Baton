@@ -26,6 +26,12 @@ function config() {
           },
         ],
       },
+      walrus: {
+        epochs: 3,
+        deletable: false,
+        uploadRelayUrl: "https://upload-relay.testnet.walrus.space",
+        maxTipMist: 1000,
+      },
     },
   };
 }
@@ -34,6 +40,7 @@ test("parseProjectConfig accepts strict public registration metadata", () => {
   const parsed = parseProjectConfig(config());
   assert.equal(parsed.remote?.network, "testnet");
   assert.equal(parsed.remote?.seal.threshold, 1);
+  assert.equal(parsed.remote?.walrus.epochs, 3);
 });
 
 test("parseProjectConfig migrates pre-network config to local-only", () => {
@@ -62,4 +69,22 @@ test("parseProjectConfig rejects private or unknown config fields", () => {
   const value = config();
   (value.remote.seal.serverConfigs[0] as Record<string, unknown>).apiKey = "must-not-be-stored";
   assert.throws(() => parseProjectConfig(value), /unknown key/);
+});
+
+test("parseProjectConfig migrates pre-Walrus remote config safely", () => {
+  const value = config();
+  delete (value.remote as Partial<typeof value.remote>).walrus;
+  const parsed = parseProjectConfig(value);
+  assert.equal(parsed.remote?.walrus.uploadRelayUrl, "https://upload-relay.testnet.walrus.space");
+  assert.equal(parsed.remote?.walrus.deletable, false);
+});
+
+test("parseProjectConfig bounds Walrus storage and relay policy", () => {
+  const insecure = config();
+  insecure.remote.walrus.uploadRelayUrl = "http://relay.example";
+  assert.throws(() => parseProjectConfig(insecure), /expected an https URL/);
+
+  const excessive = config();
+  excessive.remote.walrus.epochs = 54;
+  assert.throws(() => parseProjectConfig(excessive), /expected <= 53/);
 });

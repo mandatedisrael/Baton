@@ -4,7 +4,7 @@ import { finalize } from "../../core/finalize.ts";
 import { shortId } from "../../core/hash.ts";
 import { applyPatches, type WorkingState } from "../../core/working-state.ts";
 import { ProjectStore } from "../../store/project.ts";
-import type { Attachment, CaptureMode, Fidelity, ToolId } from "../../schema/handoff.ts";
+import type { Attachment, CaptureMode, Fidelity, Handoff, ToolId } from "../../schema/handoff.ts";
 import { fallbackPatchOps, gatherFallbackSignal } from "../../distiller/fallback.ts";
 import { scrub, scrubDeep, type ScrubFinding } from "../../distiller/scrub.ts";
 import { parseClaudeCodeTranscript } from "../../distiller/capture/claude-code.ts";
@@ -21,6 +21,27 @@ export interface PassOptions {
   review?: boolean;
 }
 
+export interface PassReporter {
+  warn(message: string): void;
+  ok(message: string): void;
+  write(message: string): void;
+  confirm(question: string): Promise<boolean>;
+}
+
+export interface PassResult {
+  sealed: boolean;
+  id?: string;
+  handoff?: Handoff;
+  queued?: boolean;
+}
+
+const CLI_REPORTER: PassReporter = {
+  warn,
+  ok,
+  write: (message) => process.stdout.write(message),
+  confirm,
+};
+
 /**
  * `baton pass` — seal the current WorkingState into a handoff (commit).
  *
@@ -32,7 +53,11 @@ export interface PassOptions {
  * persist → advance head. Secrets are scrubbed before sealing; fidelity is null
  * until graded (honest, never faked).
  */
-export async function runPass(cwd: string, opts: PassOptions = {}): Promise<void> {
+export async function passBaton(
+  cwd: string,
+  opts: PassOptions = {},
+  reporter: PassReporter = CLI_REPORTER,
+): Promise<PassResult> {
   const store = ProjectStore.open(cwd);
   const config = store.config();
   const state = store.loadWorkingState();
@@ -80,7 +105,7 @@ export async function runPass(cwd: string, opts: PassOptions = {}): Promise<void
   const scrubbed = value as WorkingState;
   const findings = [...stateFindings, ...transcriptFindings];
   if (findings.length > 0) {
-    warn(`scrubbed secrets before sealing: ${findings.map((f) => `${f.count}× ${f.type}`).join(", ")}`);
+    reporter.warn(`scrubbed secrets before sealing: ${findings.map((f) => `${f.count}× ${f.type}`).join(", ")}`);
   }
 
   if (
@@ -90,16 +115,16 @@ export async function runPass(cwd: string, opts: PassOptions = {}): Promise<void
     scrubbed.repoMap.touched.length === 0 &&
     !transcriptText
   ) {
-    warn("nothing to capture — clean working tree and empty state; passing an empty baton");
+    reporter.warn("nothing to capture — clean working tree and empty state; passing an empty baton");
   }
 
   // Review gate: show what's about to be sealed and require confirmation.
   if (opts.review) {
     const parent = config.head ? { id: config.head, handoff: store.loadHandoff(config.head) } : null;
-    process.stdout.write("\n" + renderReview(scrubbed, { tool, captureMode, parent }) + "\n");
-    if (!(await confirm("Seal this baton?"))) {
-      warn("aborted — nothing sealed");
-      return;
+    reporter.write("\n" + renderReview(scrubbed, { tool, captureMode, parent }) + "\n");
+    if (!(await reporter.confirm("Seal this baton?"))) {
+      reporter.warn("aborted — nothing sealed");
+      return { sealed: false };
     }
   }
 
@@ -121,7 +146,7 @@ export async function runPass(cwd: string, opts: PassOptions = {}): Promise<void
       const draft = finalize(scrubbed, meta).handoff;
       fidelity = await gradeHandoff(new AnthropicClient(), { handoff: draft, transcript: transcriptText });
     } catch (err) {
-      warn(`fidelity grading skipped: ${err instanceof Error ? err.message : String(err)}`);
+      reporter.warn(`fidelity grading skipped: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -138,7 +163,7 @@ export async function runPass(cwd: string, opts: PassOptions = {}): Promise<void
     store.enqueueUploadJob(createUploadJob(id, handoff));
     queued = true;
   } catch (err) {
-    warn(`baton saved locally, but remote publication was not queued: ${err instanceof Error ? err.message : String(err)}`);
+    reporter.warn(`baton saved locally, but remote publication was not queued: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   const lineage = handoff.meta.parents.length ? ` ← ${shortId(handoff.meta.parents[0]!)}` : "";
@@ -148,5 +173,10 @@ export async function runPass(cwd: string, opts: PassOptions = {}): Promise<void
     touched > 0 ? `${touched} file(s)` : null,
     handoff.fidelity.score !== null ? `fidelity ${(handoff.fidelity.score * 100).toFixed(0)}%` : null,
   ].filter(Boolean);
-  ok(`baton ${shortId(id)} passed${lineage} · ${bits.join(" · ")}${queued ? " · publication queued locally" : ""}`);
+  reporter.ok(`baton ${shortId(id)} passed${lineage} · ${bits.join(" · ")}${queued ? " · publication queued locally" : ""}`);
+  return { sealed: true, id, handoff, queued };
+}
+
+export async function runPass(cwd: string, opts: PassOptions = {}): Promise<void> {
+  await passBaton(cwd, opts, CLI_REPORTER);
 }

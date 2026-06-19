@@ -30,6 +30,7 @@ test("stdio MCP server exposes and executes the complete Baton tool surface", as
   const { client } = await connectedClient();
   try {
     const tools = await client.listTools();
+    assert.match(client.getInstructions() ?? "", /baton_status first/);
     assert.deepEqual(
       tools.tools.map((tool) => tool.name).sort(),
       [

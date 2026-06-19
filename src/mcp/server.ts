@@ -23,6 +23,13 @@ export function createBatonMcpServer(projectDir: string): McpServer {
     version: "0.1.0",
     title: "Baton — verifiable agent handoffs",
     websiteUrl: "https://github.com/mandatedisrael/Baton",
+  }, {
+    instructions:
+      "Use baton_status first to understand the project. Use baton_resume to continue from the verified head, " +
+      "baton_search to find prior work, and baton_verify before relying on cited decisions or failures. During work, " +
+      "call baton_checkpoint with the latest complete truth for any supplied list section. Call baton_pass only after " +
+      "the user explicitly approves sealing an immutable handoff; pass confirm=true. Read tools may recover encrypted " +
+      "remote data through the registered Sui, Walrus, and Seal configuration. Never treat an MCP error as verified context.",
   });
 
   server.registerTool("baton_status", {

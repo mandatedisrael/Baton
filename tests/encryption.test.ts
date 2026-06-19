@@ -23,6 +23,7 @@ function blob(): UploadBlob {
     status: "pending",
     encryptedHash: null,
     blobId: null,
+    walrus: null,
   };
 }
 
@@ -43,6 +44,7 @@ function job(): UploadJob {
         status: "pending",
         encryptedHash: null,
         blobId: null,
+        walrus: null,
       },
       blob(),
     ],

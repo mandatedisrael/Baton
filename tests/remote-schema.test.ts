@@ -22,6 +22,7 @@ function job() {
         status: "pending",
         encryptedHash: null,
         blobId: null,
+        walrus: null,
       },
       {
         id: "transcript-1",
@@ -30,6 +31,12 @@ function job() {
         status: "uploaded",
         encryptedHash: "c".repeat(64),
         blobId: "walrus-attachment",
+        walrus: {
+          step: "uploaded",
+          blobId: "walrus-attachment",
+          blobObjectId: "0x123",
+          certificate: "certificate",
+        },
       },
     ],
     anchor: { status: "pending", txDigest: null },
@@ -70,6 +77,33 @@ test("parseUploadJob binds the handoff blob to the baton id", () => {
   const mismatched = job();
   mismatched.blobs[0]!.contentHash = "d".repeat(64);
   assert.throws(() => parseUploadJob(mismatched), /baton content hash/);
+});
+
+test("parseUploadJob preserves recoverable Walrus write checkpoints", () => {
+  const value = job();
+  value.blobs[0]!.status = "encrypted";
+  value.blobs[0]!.encryptedHash = "d".repeat(64);
+  value.blobs[0]!.walrus = {
+    step: "registered",
+    blobId: "walrus-handoff",
+    blobObjectId: "0x456",
+    txDigest: "register-tx",
+  } as unknown as typeof value.blobs[1]["walrus"];
+  const parsed = parseUploadJob(value);
+  assert.equal(parsed.blobs[0]!.walrus?.step, "registered");
+});
+
+test("parseUploadJob migrates queues written before Walrus checkpoints", () => {
+  const value = job();
+  for (const blob of value.blobs) delete (blob as Partial<typeof blob>).walrus;
+  const parsed = parseUploadJob(value);
+  assert.equal(parsed.blobs[0]!.walrus, null);
+});
+
+test("parseUploadJob rejects a completed blob with mismatched Walrus identity", () => {
+  const value = job();
+  value.blobs[1]!.walrus!.blobId = "different-blob";
+  assert.throws(() => parseUploadJob(value), /must match the completed blob id/);
 });
 
 test("parseRemoteSidecar accepts completed Walrus and Sui metadata", () => {

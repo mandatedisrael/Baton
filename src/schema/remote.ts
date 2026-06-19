@@ -5,7 +5,7 @@
  * Walrus blob ids and Sui transaction data only exist after a baton is sealed,
  * so putting them inside the baton would change its identity.
  */
-import { arr, isoDatetime, literal, nullable, num, obj, oneOf, str, ValidationError } from "./validate.ts";
+import { arr, isoDatetime, literal, nullable, num, obj, oneOf, optStr, str, ValidationError } from "./validate.ts";
 
 export const UPLOAD_STATUSES = ["pending", "uploading", "anchoring", "complete", "failed"] as const;
 export type UploadStatus = (typeof UPLOAD_STATUSES)[number];
@@ -16,6 +16,29 @@ export type BlobUploadStatus = (typeof BLOB_UPLOAD_STATUSES)[number];
 export const UPLOAD_BLOB_KINDS = ["handoff", "attachment"] as const;
 export type UploadBlobKind = (typeof UPLOAD_BLOB_KINDS)[number];
 
+export type WalrusResumeStep =
+  | {
+      step: "encoded";
+      blobId: string;
+      rootHash: string;
+      unencodedSize: number;
+      nonce?: string;
+    }
+  | {
+      step: "registered";
+      blobId: string;
+      blobObjectId: string;
+      txDigest: string;
+      nonce?: string;
+    }
+  | {
+      step: "uploaded";
+      blobId: string;
+      blobObjectId: string;
+      txDigest?: string;
+      certificate: string;
+    };
+
 export interface UploadBlob {
   id: string;
   kind: UploadBlobKind;
@@ -25,6 +48,8 @@ export interface UploadBlob {
   encryptedHash: string | null;
   /** Walrus blob id, populated after upload. */
   blobId: string | null;
+  /** Last recoverable checkpoint emitted by the official Walrus write flow. */
+  walrus: WalrusResumeStep | null;
 }
 
 export interface UploadAnchor {
@@ -75,7 +100,7 @@ function hash(v: unknown, path: string): string {
 }
 
 function parseUploadBlob(v: unknown, path: string): UploadBlob {
-  const r = obj(v, path, ["id", "kind", "contentHash", "status", "encryptedHash", "blobId"]);
+  const r = obj(v, path, ["id", "kind", "contentHash", "status", "encryptedHash", "blobId", "walrus"]);
   const blob: UploadBlob = {
     id: str(r.id, `${path}.id`, { min: 1 }),
     kind: oneOf(r.kind, `${path}.kind`, UPLOAD_BLOB_KINDS),
@@ -83,8 +108,10 @@ function parseUploadBlob(v: unknown, path: string): UploadBlob {
     status: oneOf(r.status, `${path}.status`, BLOB_UPLOAD_STATUSES),
     encryptedHash: nullable(r.encryptedHash, `${path}.encryptedHash`, hash),
     blobId: nullable(r.blobId, `${path}.blobId`, (value, p) => str(value, p, { min: 1 })),
+    // Queues written before Walrus transport shipped migrate to no checkpoint.
+    walrus: nullable(r.walrus ?? null, `${path}.walrus`, parseWalrusResumeStep),
   };
-  if (blob.status === "pending" && (blob.encryptedHash !== null || blob.blobId !== null)) {
+  if (blob.status === "pending" && (blob.encryptedHash !== null || blob.blobId !== null || blob.walrus !== null)) {
     throw new ValidationError(path, "pending blob cannot have encrypted or remote metadata");
   }
   if (blob.status === "encrypted" && (blob.encryptedHash === null || blob.blobId !== null)) {
@@ -93,7 +120,56 @@ function parseUploadBlob(v: unknown, path: string): UploadBlob {
   if (blob.status === "uploaded" && (blob.encryptedHash === null || blob.blobId === null)) {
     throw new ValidationError(path, "uploaded blob requires encryptedHash and blobId");
   }
+  if (blob.walrus !== null && blob.walrus.blobId !== blob.blobId && blob.status === "uploaded") {
+    throw new ValidationError(`${path}.walrus.blobId`, "must match the completed blob id");
+  }
   return blob;
+}
+
+function parseWalrusResumeStep(v: unknown, path: string): WalrusResumeStep {
+  const record = obj(v, path, [
+    "step",
+    "blobId",
+    "rootHash",
+    "unencodedSize",
+    "nonce",
+    "blobObjectId",
+    "txDigest",
+    "certificate",
+  ]);
+  const step = oneOf(record.step, `${path}.step`, ["encoded", "registered", "uploaded"] as const);
+  const blobId = str(record.blobId, `${path}.blobId`, { min: 1 });
+  if (step === "encoded") {
+    const result: WalrusResumeStep = {
+      step,
+      blobId,
+      rootHash: str(record.rootHash, `${path}.rootHash`, { min: 1 }),
+      unencodedSize: num(record.unencodedSize, `${path}.unencodedSize`, { int: true, min: 0 }),
+    };
+    const nonce = optStr(record.nonce, `${path}.nonce`, { min: 1 });
+    if (nonce !== undefined) result.nonce = nonce;
+    return result;
+  }
+  if (step === "registered") {
+    const result: WalrusResumeStep = {
+      step,
+      blobId,
+      blobObjectId: str(record.blobObjectId, `${path}.blobObjectId`, { min: 1 }),
+      txDigest: str(record.txDigest, `${path}.txDigest`, { min: 1 }),
+    };
+    const nonce = optStr(record.nonce, `${path}.nonce`, { min: 1 });
+    if (nonce !== undefined) result.nonce = nonce;
+    return result;
+  }
+  const result: WalrusResumeStep = {
+    step,
+    blobId,
+    blobObjectId: str(record.blobObjectId, `${path}.blobObjectId`, { min: 1 }),
+    certificate: str(record.certificate, `${path}.certificate`, { min: 1 }),
+  };
+  const txDigest = optStr(record.txDigest, `${path}.txDigest`, { min: 1 });
+  if (txDigest !== undefined) result.txDigest = txDigest;
+  return result;
 }
 
 function parseUploadAnchor(v: unknown, path: string): UploadAnchor {

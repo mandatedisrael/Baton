@@ -26,6 +26,7 @@ export function createUploadJob(handoffId: string, handoff: Handoff, now: Date =
         status: "pending",
         encryptedHash: null,
         blobId: null,
+        walrus: null,
       },
       ...handoff.attachments.map((attachment) => ({
         id: attachment.id,
@@ -34,6 +35,7 @@ export function createUploadJob(handoffId: string, handoff: Handoff, now: Date =
         status: "pending" as const,
         encryptedHash: null,
         blobId: null,
+        walrus: null,
       })),
     ],
     anchor: { status: "pending", txDigest: null },

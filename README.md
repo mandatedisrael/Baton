@@ -96,7 +96,7 @@ src/
 - **The store** persists batons and their source attachments under `.baton/` (mirroring git's shape) with atomic writes and verify-on-read.
 - **Renderers and the CLI** are thin; the same engine backs an MCP server so any MCP-compatible tool drives identical logic.
 
-**Built on Sui + Walrus + Seal.** Beyond the local engine, a baton's content lives encrypted on **Walrus** (decentralized blob storage), its hashes, lineage, and fidelity attestations are anchored on **Sui**, and **Seal** provides client-side, policy-based encryption with revocable, capability-based sharing. The complete owner and delegated-reader Testnet paths are implemented and verified against live infrastructure. Invitation-scoped sponsored registration is also live on Testnet; Mainnet deployment and zkLogin remain future work.
+**Built on Sui + Walrus + Seal.** Beyond the local engine, a baton's content lives encrypted on **Walrus** (decentralized blob storage), its hashes, lineage, and fidelity attestations are anchored on **Sui**, and **Seal** provides client-side, policy-based encryption with revocable, capability-based sharing. The complete owner and delegated-reader Testnet paths are implemented and verified against live infrastructure. Operationally hardened, invitation-scoped sponsored registration is also live on Testnet; an Internet-facing sponsor deployment, Mainnet deployment, and zkLogin remain future work.
 
 ---
 
@@ -182,7 +182,7 @@ To register without first owning SUI, use a one-use invitation from a Baton spon
 baton register --sponsor https://sponsor.example --invite <token>
 ```
 
-The user signs the exact transaction locally and remains the project owner; the sponsor adds only the gas signature. The client refuses changes to the sender, sponsor, package, project, gas coin, budget, or expiry. Invitations are random, stored only as hashes, bound to one user and project on first use, and cannot be replayed for another registration.
+The user signs the exact transaction locally and remains the project owner; the sponsor adds only the gas signature. The client refuses changes to the sender, sponsor, package, project, gas coin, budget, or expiry. Invitations are random, stored only as hashes, and cannot be replayed for another registration. Operators can pre-bind an invitation to the intended user and project; an unbound invitation becomes permanently bound on first use.
 
 For the safest invitation, the user sends the operator the address printed by `baton login` and the project ID printed by `baton status`. The operator binds both before sharing the token:
 

@@ -96,7 +96,7 @@ src/
 - **The store** persists batons and their source attachments under `.baton/` (mirroring git's shape) with atomic writes and verify-on-read.
 - **Renderers and the CLI** are thin; the same engine backs an MCP server so any MCP-compatible tool drives identical logic.
 
-**Built on Sui + Walrus + Seal.** Beyond the local engine, a baton's content lives encrypted on **Walrus** (decentralized blob storage), its hashes, lineage, and fidelity attestations are anchored on **Sui**, and **Seal** provides client-side, policy-based encryption with revocable, capability-based sharing. *Today the local engine, crash-safe publication queue, encrypted payload cache, and Seal adapter are implemented. Walrus transport and Sui registration/anchoring are the next network slices.*
+**Built on Sui + Walrus + Seal.** Beyond the local engine, a baton's content lives encrypted on **Walrus** (decentralized blob storage), its hashes, lineage, and fidelity attestations are anchored on **Sui**, and **Seal** provides client-side, policy-based encryption with revocable, capability-based sharing. The complete owner and delegated-reader Testnet paths are implemented and verified against live infrastructure; Mainnet deployment, zkLogin, and sponsored gas remain future work.
 
 ---
 
@@ -142,7 +142,14 @@ Different tools expose different ground truth, so Baton has one protocol with se
 Requires **Node ≥ 22.18** (runs TypeScript natively). The pure core has zero runtime dependencies; network adapters use the official Mysten SDKs.
 
 ```sh
-npm install          # install the CLI, MCP, and network SDK dependencies
+npm install -g github:mandatedisrael/Baton#v0.2.0
+baton --version
+```
+
+For repository development:
+
+```sh
+npm install
 npm test
 ```
 
@@ -160,6 +167,11 @@ baton queue encrypt  # encrypt queued payloads through Seal
 baton publish        # encrypt, upload to Walrus, and anchor on Sui
 baton fetch <id>     # recover a missing baton through Sui, Walrus, and Seal
 baton resume         # verify/recover, then render for the next agent
+baton share <address> --out teammate.json  # grant revocable read access
+# on the recipient's machine:
+baton accept teammate.json                 # verify the grant and join
+# back on the owner's machine:
+baton revoke <address>                     # deny future Seal key requests
 ```
 
 (In this repo, run commands as `npm run baton -- <command>` until installed globally.)
@@ -177,6 +189,9 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 | `baton register [--package <id>] [--rpc <url>]` | Register the project against the canonical Testnet package. |
 | `baton publish` | Resume every queued baton through Seal encryption, Walrus certification, and Sui anchoring. |
 | `baton fetch <full-id>` | Recover and authenticate a missing baton and all attachments from Sui, Walrus, and Seal. |
+| `baton share <address> [--out <file>]` | Grant address-bound read access on Sui and write a public invitation. |
+| `baton accept <file>` | Verify a recipient-owned, active `AccessCap` and join the shared project. |
+| `baton revoke <address>` | Revoke delegated access on-chain; future uncached decryptions are denied. |
 | `baton status` | Show the current working state. |
 | `baton pass` | Seal the working state into a baton (commit). |
 | `baton log` | List batons, newest first (`*` marks the head). |
@@ -193,10 +208,10 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 
 ### MCP server
 
-Install the checkout globally, then point any stdio-compatible MCP client at the project it may access:
+Install Baton globally, then point any stdio-compatible MCP client at the project it may access:
 
 ```sh
-npm install -g .
+npm install -g github:mandatedisrael/Baton#v0.2.0
 baton-mcp --project /absolute/path/to/project
 ```
 
@@ -213,7 +228,7 @@ Handoffs are clearly the primitive every agent vendor wants — Cursor and Codex
 
 Baton is the handoff layer **nobody owns but you**: encrypted client-side, stored on neutral infrastructure, verifiable on-chain, shareable and revocable.
 
-The complete owner-controlled storage path is deployed and verified on Testnet: Seal encryption/decryption, resumable Walrus storage/retrieval, Sui manifest anchoring, attachment restoration, and automatic recovery during `resume` all run against live infrastructure. Exact object, blob, hash, and transaction evidence lives in [docs/deployments.md](docs/deployments.md). Sharing/revocation UX and Mainnet deployment are still in progress, so Baton does not yet claim Mainnet readiness.
+The complete owner-controlled storage path and raw-keypair delegated-reader path are deployed and verified on Testnet: Seal encryption/decryption, resumable Walrus storage/retrieval, Sui manifest anchoring, attachment restoration, automatic recovery during `resume`, address-bound sharing, and on-chain revocation all run against live infrastructure. Exact object, blob, hash, capability, and transaction evidence lives in [docs/deployments.md](docs/deployments.md). zkLogin, sponsored gas, external beta hardening, and Mainnet deployment remain in progress, so Baton does not yet claim Mainnet readiness.
 
 ---
 

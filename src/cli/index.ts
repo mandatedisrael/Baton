@@ -29,6 +29,7 @@ import { runRevoke } from "./commands/revoke.ts";
 import { runAccept } from "./commands/accept.ts";
 import { TOOL_IDS, type ToolId } from "../schema/handoff.ts";
 import { RULES_TARGETS, type RulesFormat } from "../render/rules.ts";
+import { readFileSync } from "node:fs";
 
 const USAGE = `baton — verifiable handoffs between coding agents (git for agent memory)
 
@@ -74,7 +75,10 @@ Options:
   --amount <mist>   (fund-storage) SUI MIST to exchange (default 100000000)
 `;
 
-const VERSION = "0.1.0";
+const packageMetadata = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as {
+  version?: unknown;
+};
+const VERSION = typeof packageMetadata.version === "string" ? packageMetadata.version : "unknown";
 
 function main(argv: string[]): void {
   const [command, ...rest] = argv;

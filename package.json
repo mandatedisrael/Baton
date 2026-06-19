@@ -1,11 +1,20 @@
 {
   "name": "baton",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Git for agent memory — verifiable handoffs between coding agents, on Sui + Walrus + Seal",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mandatedisrael/Baton.git"
+  },
+  "homepage": "https://github.com/mandatedisrael/Baton#readme",
+  "bugs": {
+    "url": "https://github.com/mandatedisrael/Baton/issues"
+  },
+  "preferGlobal": true,
   "type": "module",
   "license": "Apache-2.0",
   "files": [
-    "src",
+    "dist",
     "README.md",
     "docs/mcp.md"
   ],
@@ -13,12 +22,15 @@
     "node": ">=22.18"
   },
   "bin": {
-    "baton": "./src/cli/index.ts",
-    "baton-mcp": "./src/mcp/index.ts"
+    "baton": "./dist/cli/index.js",
+    "baton-mcp": "./dist/mcp/index.js"
   },
   "scripts": {
     "baton": "node src/cli/index.ts",
     "mcp": "node src/mcp/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
+    "prepack": "npm run build",
     "test": "node --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

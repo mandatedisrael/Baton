@@ -7,10 +7,7 @@
 Baton requires Node 22.18 or newer because its published executables run TypeScript directly.
 
 ```sh
-git clone https://github.com/mandatedisrael/Baton.git
-cd Baton
-npm install
-npm install -g .
+npm install -g github:mandatedisrael/Baton#v0.2.0
 
 baton-mcp --project /absolute/path/to/project
 ```

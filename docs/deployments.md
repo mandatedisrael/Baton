@@ -69,4 +69,37 @@ The owner read path was verified on 2026-06-19 with a new two-blob baton contain
 
 A clean Baton directory was created with only the registered project's public network configuration and head content ID—no handoff, queue, ciphertext cache, remote sidecar, or attachment bytes. `baton fetch` resolved and strictly verified the Sui dynamic-field manifest, retrieved both ciphertexts from the public Testnet Walrus aggregator, decrypted them through the live Seal committee using the protected owner identity and `OwnerCap`, re-hashed both plaintexts, cross-checked all anchored metadata, and persisted the complete local set. The recovered attachment contained the expected source bytes. A separate clean directory confirmed that `baton resume` invokes the same recovery automatically.
 
-This proves the owner-controlled Testnet read/write path. Delegated sharing, capability revocation, key rotation, and Mainnet deployment are not claimed.
+This proves the owner-controlled Testnet read/write path. The delegated path is recorded separately below. Mainnet deployment is not claimed.
+
+## Package v2 — delegated access policy
+
+The package was upgraded with local compatibility checks and dependency verification enabled. No verification bypass was used.
+
+| Item | Value |
+|---|---|
+| Original package identity | `0x74020a1a00779799768a5145bd2734f3e724d2826c5e8d610f345c2c036b090e` |
+| Executable package v2 | `0xd92b150b57ef31defb5b9ddd5a155102efe1c34058a19fdb30cbe4f4a46aa3e3` |
+| Upgrade transaction | `FzC3a2mWPB3T7F1iE43rDXgoooNK2M719sGkr1DjAeZy` |
+| Toolchain | `1.73.2` |
+
+Package v2 adds address-bound, non-publicly-transferable `AccessCap` objects and per-recipient access records. Revocation flips the live record without requiring the capability back; re-granting advances its generation so an older capability cannot become valid again.
+
+## Live delegated sharing and revocation evidence
+
+On 2026-06-19, an existing owner-controlled project published a new child baton under the v2 policy, granted a separately generated Ed25519 identity read access, and handed it a public invitation. The recipient verified ownership and the live access generation, fetched the ciphertext from Walrus, decrypted it through the decentralized Seal committee, verified the handoff hash, and rendered the resume context.
+
+| Item | Value |
+|---|---|
+| ProjectMemory | `0xa0dd123b2ec564d7502688f751f360e9ef3f7d18f4cd73a6e671afdf3c0acaa4` |
+| Baton content hash | `bf90541dc11b6ae4cafcd1d02f81b0c6302ab7c894fee948f92d1ccb9ea5ea6a` |
+| Walrus blob | `1z7xhue7qk99wnT-X4KwvcsU6nQFav_QdHUUjxUFTr8` |
+| Encrypted blob SHA-256 | `46bc514618efab1acae2905ddd1cb1906bec00040caa92bb1fe43fb902c2f0dd` |
+| Manifest anchor transaction | `BGeGKG9nRMpu1Wdfbyh6dWkp6RKMKcUNve8YCkyvC15i` |
+| Recipient | `0xc3463de2e9d0e4355a55eae2250f6d2e7a61488ab630662b464a9f626cb7a75a` |
+| AccessCap | `0xa8c254e7b42e115b7c28416de992327894f80f3f8a6bab86e2b60038c98d3065` |
+| Grant transaction | `HCmWTwW3JRh7YokaJ4MvMgFpbcraLGBJomefB6TRs1yg` |
+| Revocation transaction | `4cxmm2f14ves9QKMxfdxXYKgEr6DRei8aw9XEvQBBcPK` |
+
+After revocation, the recipient's local copy was removed and a fresh remote fetch was attempted. Walrus retrieval still succeeded, but Seal denied the key request with `User does not have access to one or more of the requested keys`. A separate clean owner directory then fetched and decrypted the same baton successfully, proving revocation affected the delegate without damaging owner recovery.
+
+Revocation is forward-only: it cannot erase plaintext already fetched by a recipient. zkLogin, sponsored gas, external beta hardening, and Mainnet deployment remain unproven and are not claimed here.

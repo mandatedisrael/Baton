@@ -5,7 +5,7 @@ import { fromBase64, normalizeSuiAddress } from "@mysten/sui/utils";
 import { isValidTransactionSignature } from "@mysten/sui/verify";
 import { BatonError } from "../core/errors.js";
 import { buildSponsoredRegistrationBytes, executeSponsoredRegistrationWithSignature, serializeSponsoredTransaction, SPONSORED_REGISTRATION_GAS_BUDGET, } from "../chain/sponsorship.js";
-import { completeSponsorReservation, existingSponsorReservation, loadSponsorReservation, saveSponsorReservation, } from "./state.js";
+import { completeSponsorReservation, existingSponsorReservation, loadSponsorReservation, saveSponsorReservation, reservedSponsorGasObjects, } from "./state.js";
 const MAX_BODY_BYTES = 16 * 1024;
 const REQUEST_TTL_MS = 5 * 60 * 1000;
 const RATE_WINDOW_MS = 60 * 1000;
@@ -62,6 +62,7 @@ function publicEnvelope(reservation) {
         sponsor: reservation.sponsor,
         gasPrice: reservation.gasPrice,
         gasBudget: reservation.gasBudget,
+        gasPayment: reservation.gasPayment,
         expirationEpoch: reservation.expirationEpoch,
         expiresAt: reservation.expiresAt,
     };
@@ -102,6 +103,26 @@ export function createSponsorServer(options) {
                 }
                 const system = await options.client.getLatestSuiSystemState();
                 const gasPrice = await options.client.getReferenceGasPrice();
+                const reservedGas = reservedSponsorGasObjects(options.statePath, now());
+                let cursor;
+                let gasPayment = [];
+                do {
+                    const coins = await options.client.getCoins({
+                        owner: options.sponsorKeypair.toSuiAddress(),
+                        coinType: "0x2::sui::SUI",
+                        cursor,
+                        limit: 50,
+                    });
+                    const coin = coins.data.find((candidate) => BigInt(candidate.balance) >= SPONSORED_REGISTRATION_GAS_BUDGET &&
+                        !reservedGas.has(candidate.coinObjectId.toLowerCase()));
+                    if (coin) {
+                        gasPayment = [{ objectId: coin.coinObjectId, version: coin.version, digest: coin.digest }];
+                        break;
+                    }
+                    cursor = coins.hasNextPage ? coins.nextCursor : null;
+                } while (cursor);
+                if (gasPayment.length === 0)
+                    throw new BatonError("INVALID_STATE", "sponsor has no unreserved SUI coin large enough for registration");
                 const expirationEpoch = BigInt(system.epoch) + 1n;
                 const requestNow = now();
                 const expiresAt = new Date(requestNow.getTime() + REQUEST_TTL_MS).toISOString();
@@ -111,6 +132,7 @@ export function createSponsorServer(options) {
                     sender,
                     sponsor: options.sponsorKeypair.toSuiAddress(),
                     gasPrice,
+                    gasPayment,
                     expirationEpoch,
                 });
                 const reservation = {
@@ -119,6 +141,7 @@ export function createSponsorServer(options) {
                     sponsor: options.sponsorKeypair.toSuiAddress(),
                     gasPrice: gasPrice.toString(),
                     gasBudget: SPONSORED_REGISTRATION_GAS_BUDGET.toString(),
+                    gasPayment,
                     expirationEpoch: expirationEpoch.toString(),
                     expiresAt,
                     sender,

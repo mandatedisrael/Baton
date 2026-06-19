@@ -27,6 +27,7 @@ function reservation(): SponsorReservation {
     sponsor: "0x1",
     gasPrice: "1000",
     gasBudget: "50000000",
+    gasPayment: [{ objectId: "0x99", version: "1", digest: "2E3Wu14rQZ4rqfSi8Ve1arY4HWd1wv2cZmJbdatMgv2p" }],
     expirationEpoch: "1200",
     expiresAt: "2026-06-19T12:10:00.000Z",
     sender: "0x2",

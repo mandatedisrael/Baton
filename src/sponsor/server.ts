@@ -17,6 +17,7 @@ import {
   existingSponsorReservation,
   loadSponsorReservation,
   saveSponsorReservation,
+  reservedSponsorGasObjects,
   type SponsorReservation,
 } from "./state.ts";
 
@@ -84,6 +85,7 @@ function publicEnvelope(reservation: SponsorReservation): SponsoredRegistrationE
     sponsor: reservation.sponsor,
     gasPrice: reservation.gasPrice,
     gasBudget: reservation.gasBudget,
+    gasPayment: reservation.gasPayment,
     expirationEpoch: reservation.expirationEpoch,
     expiresAt: reservation.expiresAt,
   };
@@ -126,6 +128,27 @@ export function createSponsorServer(options: SponsorServerOptions): Server {
         }
         const system = await options.client.getLatestSuiSystemState();
         const gasPrice = await options.client.getReferenceGasPrice();
+        const reservedGas = reservedSponsorGasObjects(options.statePath, now());
+        let cursor: string | null | undefined;
+        let gasPayment: Array<{ objectId: string; version: string; digest: string }> = [];
+        do {
+          const coins = await options.client.getCoins({
+            owner: options.sponsorKeypair.toSuiAddress(),
+            coinType: "0x2::sui::SUI",
+            cursor,
+            limit: 50,
+          });
+          const coin = coins.data.find((candidate) =>
+            BigInt(candidate.balance) >= SPONSORED_REGISTRATION_GAS_BUDGET &&
+            !reservedGas.has(candidate.coinObjectId.toLowerCase()),
+          );
+          if (coin) {
+            gasPayment = [{ objectId: coin.coinObjectId, version: coin.version, digest: coin.digest }];
+            break;
+          }
+          cursor = coins.hasNextPage ? coins.nextCursor : null;
+        } while (cursor);
+        if (gasPayment.length === 0) throw new BatonError("INVALID_STATE", "sponsor has no unreserved SUI coin large enough for registration");
         const expirationEpoch = BigInt(system.epoch) + 1n;
         const requestNow = now();
         const expiresAt = new Date(requestNow.getTime() + REQUEST_TTL_MS).toISOString();
@@ -135,6 +158,7 @@ export function createSponsorServer(options: SponsorServerOptions): Server {
           sender,
           sponsor: options.sponsorKeypair.toSuiAddress(),
           gasPrice,
+          gasPayment,
           expirationEpoch,
         });
         const reservation: SponsorReservation = {
@@ -143,6 +167,7 @@ export function createSponsorServer(options: SponsorServerOptions): Server {
           sponsor: options.sponsorKeypair.toSuiAddress(),
           gasPrice: gasPrice.toString(),
           gasBudget: SPONSORED_REGISTRATION_GAS_BUDGET.toString(),
+          gasPayment,
           expirationEpoch: expirationEpoch.toString(),
           expiresAt,
           sender,

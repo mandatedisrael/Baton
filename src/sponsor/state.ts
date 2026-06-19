@@ -38,11 +38,19 @@ function parseReservation(value: unknown, index: number): SponsorReservation | n
   if (value === null) return null;
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new BatonError("INVALID_STATE", `invalid sponsor reservation at ${index}`);
   const record = value as Record<string, unknown>;
-  const keys = ["requestId", "transactionBytes", "sponsor", "gasPrice", "gasBudget", "expirationEpoch", "expiresAt", "sender", "projectId", "result"];
+  const keys = ["requestId", "transactionBytes", "sponsor", "gasPrice", "gasBudget", "gasPayment", "expirationEpoch", "expiresAt", "sender", "projectId", "result"];
   if (Object.keys(record).some((key) => !keys.includes(key))) throw new BatonError("INVALID_STATE", `unknown sponsor reservation field at ${index}`);
-  for (const key of keys.filter((key) => key !== "result")) {
+  for (const key of keys.filter((key) => key !== "result" && key !== "gasPayment")) {
     if (typeof record[key] !== "string" || record[key].length === 0) throw new BatonError("INVALID_STATE", `invalid sponsor reservation ${key} at ${index}`);
   }
+  if (!Array.isArray(record.gasPayment) || record.gasPayment.length !== 1) throw new BatonError("INVALID_STATE", `invalid sponsor gas payment at ${index}`);
+  const gasPayment = record.gasPayment.map((payment) => {
+    if (!payment || typeof payment !== "object" || Array.isArray(payment)) throw new BatonError("INVALID_STATE", `invalid sponsor gas payment at ${index}`);
+    const raw = payment as Record<string, unknown>;
+    if (Object.keys(raw).some((key) => !["objectId", "version", "digest"].includes(key))) throw new BatonError("INVALID_STATE", `unknown sponsor gas payment field at ${index}`);
+    if (typeof raw.objectId !== "string" || typeof raw.version !== "string" || typeof raw.digest !== "string") throw new BatonError("INVALID_STATE", `invalid sponsor gas payment at ${index}`);
+    return { objectId: raw.objectId, version: raw.version, digest: raw.digest };
+  });
   let result: RegistrationResult | null = null;
   if (record.result !== null) {
     if (!record.result || typeof record.result !== "object" || Array.isArray(record.result)) throw new BatonError("INVALID_STATE", `invalid sponsor result at ${index}`);
@@ -51,7 +59,7 @@ function parseReservation(value: unknown, index: number): SponsorReservation | n
     if (typeof raw.digest !== "string" || typeof raw.projectObjectId !== "string" || typeof raw.ownerCapId !== "string") throw new BatonError("INVALID_STATE", `invalid sponsor result at ${index}`);
     result = { digest: raw.digest, projectObjectId: raw.projectObjectId, ownerCapId: raw.ownerCapId };
   }
-  return { ...(record as unknown as Omit<SponsorReservation, "result">), result };
+  return { ...(record as unknown as Omit<SponsorReservation, "result" | "gasPayment">), gasPayment, result };
 }
 
 function parseState(value: unknown): SponsorState {
@@ -85,8 +93,9 @@ function readState(path: string): SponsorState {
 
 function writeState(path: string, state: SponsorState): void {
   const dir = dirname(path);
+  const directoryExisted = existsSync(dir);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  chmodSync(dir, 0o700);
+  if (!directoryExisted) chmodSync(dir, 0o700);
   const temp = join(dir, `.sponsor-${randomUUID()}.tmp`);
   try {
     writeFileSync(temp, `${JSON.stringify(state, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
@@ -168,4 +177,15 @@ export function completeSponsorReservation(
   invite.reservation.result = result;
   invite.usedAt = now.toISOString();
   writeState(path, state);
+}
+
+export function reservedSponsorGasObjects(path: string, now = new Date()): Set<string> {
+  const state = readState(path);
+  const reserved = new Set<string>();
+  for (const invite of state.invites) {
+    const reservation = invite.reservation;
+    if (!reservation || reservation.result || Date.parse(reservation.expiresAt) <= now.getTime()) continue;
+    for (const payment of reservation.gasPayment) reserved.add(payment.objectId.toLowerCase());
+  }
+  return reserved;
 }

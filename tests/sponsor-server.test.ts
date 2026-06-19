@@ -29,6 +29,13 @@ test("one-use invitation sponsors only the exact user registration", async () =>
   const client = {
     async getLatestSuiSystemState() { return { epoch: "1200" }; },
     async getReferenceGasPrice() { return 1000n; },
+    async getCoins() {
+      return {
+        data: [{ coinObjectId: "0x99", version: "1", digest: "2E3Wu14rQZ4rqfSi8Ve1arY4HWd1wv2cZmJbdatMgv2p", balance: "100000000" }],
+        hasNextPage: false,
+        nextCursor: null,
+      };
+    },
     async executeTransactionBlock(input: { signature: string[] }) {
       executions += 1;
       assert.equal(input.signature.length, 2);

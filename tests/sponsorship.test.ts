@@ -11,6 +11,7 @@ import {
 const PACKAGE = "0x1234";
 const USER = new Ed25519Keypair().toSuiAddress();
 const SPONSOR = new Ed25519Keypair().toSuiAddress();
+const GAS = [{ objectId: "0x99", version: "1", digest: "2E3Wu14rQZ4rqfSi8Ve1arY4HWd1wv2cZmJbdatMgv2p" }];
 
 async function envelope(): Promise<SponsoredRegistrationEnvelope> {
   const bytes = await buildSponsoredRegistrationBytes({
@@ -19,6 +20,7 @@ async function envelope(): Promise<SponsoredRegistrationEnvelope> {
     sender: USER,
     sponsor: SPONSOR,
     gasPrice: 1000n,
+    gasPayment: GAS,
     expirationEpoch: 1200n,
   });
   return {
@@ -27,6 +29,7 @@ async function envelope(): Promise<SponsoredRegistrationEnvelope> {
     sponsor: SPONSOR,
     gasPrice: "1000",
     gasBudget: "50000000",
+    gasPayment: GAS,
     expirationEpoch: "1200",
     expiresAt: "2026-06-19T13:00:00.000Z",
   };
@@ -39,6 +42,7 @@ test("sponsored registration bytes are deterministic for both signers", async ()
     sender: USER,
     sponsor: SPONSOR,
     gasPrice: 1000n,
+    gasPayment: GAS,
     expirationEpoch: 1200n,
   });
   const second = await buildSponsoredRegistrationBytes({
@@ -47,6 +51,7 @@ test("sponsored registration bytes are deterministic for both signers", async ()
     sender: USER,
     sponsor: SPONSOR,
     gasPrice: 1000n,
+    gasPayment: GAS,
     expirationEpoch: 1200n,
   });
   assert.deepEqual(first, second);

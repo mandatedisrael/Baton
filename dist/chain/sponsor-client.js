@@ -56,15 +56,31 @@ function strings(value, keys) {
     }
     return output;
 }
+function preparedEnvelope(value) {
+    const stringKeys = ["requestId", "transactionBytes", "sponsor", "gasPrice", "gasBudget", "expirationEpoch", "expiresAt"];
+    const allowed = [...stringKeys, "gasPayment"];
+    if (Object.keys(value).some((key) => !allowed.includes(key)))
+        throw new BatonError("INVALID_STATE", "sponsor response contains unknown fields");
+    const parsed = strings(Object.fromEntries(stringKeys.map((key) => [key, value[key]])), stringKeys);
+    if (!Array.isArray(value.gasPayment) || value.gasPayment.length !== 1)
+        throw new BatonError("INVALID_STATE", "sponsor response.gasPayment is invalid");
+    const gasPayment = value.gasPayment.map((entry) => {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry))
+            throw new BatonError("INVALID_STATE", "sponsor response.gasPayment is invalid");
+        const raw = entry;
+        const payment = strings(raw, ["objectId", "version", "digest"]);
+        return { objectId: payment.objectId, version: payment.version, digest: payment.digest };
+    });
+    return { ...parsed, gasPayment };
+}
 export async function registerProjectWithSponsor(input) {
     const base = validateSponsorUrl(input.sponsorUrl);
     const sender = input.userKeypair.toSuiAddress();
-    const prepared = strings(await post(`${base}/v1/register/prepare`, {
+    const envelope = preparedEnvelope(await post(`${base}/v1/register/prepare`, {
         token: input.inviteToken,
         sender,
         projectId: input.projectId,
-    }, 15_000), ["requestId", "transactionBytes", "sponsor", "gasPrice", "gasBudget", "expirationEpoch", "expiresAt"]);
-    const envelope = prepared;
+    }, 15_000));
     const bytes = await verifySponsoredRegistrationEnvelope({
         envelope,
         packageId: input.packageId,

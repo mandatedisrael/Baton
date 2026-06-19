@@ -13,6 +13,7 @@ export interface SponsoredRegistrationEnvelope {
   sponsor: string;
   gasPrice: string;
   gasBudget: string;
+  gasPayment: Array<{ objectId: string; version: string; digest: string }>;
   expirationEpoch: string;
   expiresAt: string;
 }
@@ -24,6 +25,7 @@ export async function buildSponsoredRegistrationBytes(input: {
   sponsor: string;
   gasPrice: bigint;
   gasBudget?: bigint;
+  gasPayment: Array<{ objectId: string; version: string; digest: string }>;
   expirationEpoch: bigint;
 }): Promise<Uint8Array> {
   const gasBudget = input.gasBudget ?? SPONSORED_REGISTRATION_GAS_BUDGET;
@@ -35,9 +37,8 @@ export async function buildSponsoredRegistrationBytes(input: {
   const tx = buildRegistrationTransaction(normalizeSuiObjectId(input.packageId), input.projectId);
   tx.setSender(normalizeSuiAddress(input.sender));
   tx.setGasOwner(normalizeSuiAddress(input.sponsor));
-  // Address-balance sponsorship avoids mutable gas-coin references and lets
-  // both parties sign exactly the same deterministic transaction bytes.
-  tx.setGasPayment([]);
+  if (input.gasPayment.length !== 1) throw new BatonError("INVALID_STATE", "sponsored registration requires exactly one gas coin");
+  tx.setGasPayment(input.gasPayment);
   tx.setGasPrice(input.gasPrice);
   tx.setGasBudget(gasBudget);
   tx.setExpiration({ Epoch: input.expirationEpoch.toString() });
@@ -72,6 +73,7 @@ export async function verifySponsoredRegistrationEnvelope(input: {
     sponsor: input.envelope.sponsor,
     gasPrice,
     gasBudget,
+    gasPayment: input.envelope.gasPayment,
     expirationEpoch,
   });
   let received: Uint8Array;

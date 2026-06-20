@@ -248,9 +248,11 @@ baton init
 This installs the Stop hook for automatic checkpoints. Work normally. Start new chats with `baton resume` or `baton render claude-md --write` (creates CLAUDE.md).
 
 **Codex / Cursor / other MCP clients**
-1. Run `baton init` (and `baton mcp setup` for copy-paste config).
-2. Add the `baton-mcp` server in your client's MCP settings (see `baton mcp setup codex` etc.).
+1. Run `baton init` and `baton setup codex` (or `baton setup all`).
+2. Restart the client so it discovers Baton's project-scoped MCP server.
 3. In a new session, say "resume using baton tools" or let the agent call `baton_resume`.
+
+When Codex passes a baton, Baton discovers the newest `~/.codex/sessions` rollout whose recorded `cwd` exactly matches the project, scrubs it, and seals it as a transcript attachment. CLI passes show the transcript path, size, scrub findings, and delivery behavior before asking for confirmation.
 
 The MCP server gives agents native tools:
 - `baton_status`, `baton_resume`, `baton_checkpoint`, `baton_pass` (with explicit confirm), `baton_verify`, etc.
@@ -270,7 +272,7 @@ Handoffs are clearly the primitive every agent vendor wants — Cursor and Codex
 
 Baton is the handoff layer **nobody owns but you**: encrypted client-side, stored on neutral infrastructure, verifiable on-chain, shareable and revocable.
 
-The complete owner-controlled storage path and raw-keypair delegated-reader path are deployed and verified on Testnet: Seal encryption/decryption, resumable Walrus storage/retrieval, Sui manifest anchoring, attachment restoration, read-only remote auditing, automatic recovery during `resume`, address-bound sharing, on-chain revocation, and invitation-scoped sponsored registration all run against live infrastructure. Exact object, blob, hash, capability, transaction, audit, and failure evidence lives in [docs/deployments.md](docs/deployments.md). A public sponsor deployment, zkLogin, external beta hardening, and Mainnet deployment remain in progress, so Baton does not yet claim Mainnet readiness.
+The complete owner-controlled storage path and raw-keypair delegated-reader path are deployed and verified on Testnet: Seal encryption/decryption, resumable Walrus storage/retrieval, Sui manifest anchoring, Codex transcript attachment restoration, read-only remote auditing, automatic recovery during `resume`, address-bound sharing, on-chain revocation, and invitation-scoped sponsored registration all run against live infrastructure. Exact object, blob, hash, capability, transaction, audit, and failure evidence lives in [docs/deployments.md](docs/deployments.md). A public sponsor deployment, transcript fidelity grading without a configured Anthropic API key, external two-machine beta testing, zkLogin, and Mainnet deployment remain in progress, so Baton does not yet claim Mainnet readiness.
 
 ---
 

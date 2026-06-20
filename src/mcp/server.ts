@@ -26,7 +26,7 @@ export function createBatonMcpServer(projectDir: string): McpServer {
   }, {
     instructions:
       "Baton provides verified handoff state for this project via MCP tools. " +
-      "Start by calling baton_status to see the current mission, status, decisions, and graveyard. " +
+      "Call baton_status first to see the current mission, status, decisions, and graveyard. " +
       "Use baton_resume to get the full agent-ready context for resuming work. " +
       "During a session, proactively call baton_checkpoint whenever key decisions, failures, or next actions change. " +
       "Only call baton_pass (with confirm: true) after the user explicitly says to seal and pass the baton. " +

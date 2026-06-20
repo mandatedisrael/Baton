@@ -48,7 +48,10 @@ export function defaultIdentityPath(home: string = homedir()): string {
 }
 
 function parseIdentity(value: unknown): IdentityRecord {
-  const r = obj(value, "identity", ["schemaVersion", "scheme", "address", "createdAt"]);
+  const r = obj(value, "identity", [
+    "schemaVersion", "scheme", "address", "createdAt", "secretKey",
+    "provider", "userSalt", "ephemeralPrivateKey", "maxEpoch", "randomness", "lastJwt",
+  ]);
 
   const scheme = literal(r.scheme, "identity.scheme", "ED25519") as "ED25519" | "ZKLOGIN";
   const address = str(r.address, "identity.address", { min: 1 });

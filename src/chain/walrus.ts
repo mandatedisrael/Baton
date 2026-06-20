@@ -1,6 +1,6 @@
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import type { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
-import { walrus, type WriteBlobStep } from "@mysten/walrus";
+import { blobIdFromInt, walrus, type WriteBlobStep } from "@mysten/walrus";
 import { BatonError } from "../core/errors.ts";
 import type { RemoteProjectConfig } from "../schema/project.ts";
 import type { WalrusResumeStep } from "../schema/remote.ts";
@@ -21,6 +21,18 @@ interface WalrusWriteFlow {
     epochs: number;
     deletable: boolean;
   }): AsyncIterable<WriteBlobStep>;
+}
+
+export async function reconcileCertifiedUpload(
+  resume: WalrusResumeStep | null,
+  getBlobObject: (id: string) => Promise<{ blob_id: string; certified_epoch: number | null }>,
+): Promise<{ blobId: string } | null> {
+  if (!resume || resume.step !== "uploaded") return null;
+  const blob = await getBlobObject(resume.blobObjectId);
+  if (blobIdFromInt(blob.blob_id) !== resume.blobId) {
+    throw new BatonError("HASH_MISMATCH", "Walrus blob object identity changed while reconciling certification");
+  }
+  return blob.certified_epoch === null ? null : { blobId: resume.blobId };
 }
 
 /**
@@ -74,6 +86,11 @@ export function createWalrusUploader(input: {
 
   return {
     async upload(request) {
+      const reconciled = await reconcileCertifiedUpload(
+        request.resume,
+        (id) => client.walrus.getBlobObject(id),
+      );
+      if (reconciled) return reconciled;
       const flow = client.walrus.writeBlobFlow({
         blob: request.data,
         ...(request.resume ? { resume: request.resume as WriteBlobStep } : {}),

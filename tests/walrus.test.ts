@@ -2,8 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import type { WriteBlobStep } from "@mysten/walrus";
+import { blobIdFromInt } from "@mysten/walrus";
 import { BatonError } from "../src/core/errors.ts";
-import { runWalrusWriteFlow } from "../src/chain/walrus.ts";
+import { reconcileCertifiedUpload, runWalrusWriteFlow } from "../src/chain/walrus.ts";
 
 function flow(steps: WriteBlobStep[]) {
   return {
@@ -74,4 +75,27 @@ test("runWalrusWriteFlow awaits durable checkpoint callbacks", async () => {
     },
   );
   assert.deepEqual(order, ["saved"]);
+});
+
+test("reconcileCertifiedUpload treats an already-certified uploaded checkpoint as complete", async () => {
+  const blobId = blobIdFromInt("1");
+  const resume = {
+    step: "uploaded" as const,
+    blobId,
+    blobObjectId: "0x1",
+    txDigest: "register",
+    certificate: "certificate",
+  };
+  assert.deepEqual(
+    await reconcileCertifiedUpload(resume, async () => ({ blob_id: "1", certified_epoch: 42 })),
+    { blobId },
+  );
+  assert.equal(
+    await reconcileCertifiedUpload(resume, async () => ({ blob_id: "1", certified_epoch: null })),
+    null,
+  );
+  await assert.rejects(
+    () => reconcileCertifiedUpload(resume, async () => ({ blob_id: "2", certified_epoch: 42 })),
+    /identity changed/,
+  );
 });

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runPass } from "../src/cli/commands/pass.ts";
@@ -63,4 +63,38 @@ test("pass persists a scrubbed transcript that survives deletion of the source",
   assert.doesNotMatch(saved, new RegExp(secret));
   assert.match(saved, /\[REDACTED:github-token\]/);
   assert.equal(saved.split("\n").length, 3, "scrubbing must preserve citation line numbers");
+});
+
+test("pass discovers, scrubs, and attaches the latest Codex project transcript", async () => {
+  const store = ProjectStore.init(root);
+  const sessionsRoot = join(root, "codex-sessions");
+  const sessionDir = join(sessionsRoot, "2026", "06", "20");
+  mkdirSync(sessionDir, { recursive: true });
+  const secret = `ghp_${"b".repeat(36)}`;
+  const transcriptPath = join(sessionDir, "rollout.jsonl");
+  writeFileSync(transcriptPath, [
+    JSON.stringify({ type: "session_meta", payload: {
+      id: "codex-session", cwd: root, git: { branch: "main" },
+    } }),
+    JSON.stringify({ type: "turn_context", payload: { cwd: root, model: "gpt-5.5" } }),
+    JSON.stringify({ type: "response_item", payload: {
+      type: "message", role: "user", content: [{ type: "input_text", text: `Use token ${secret}` }],
+    } }),
+    JSON.stringify({ type: "response_item", payload: {
+      type: "message", role: "assistant", content: [{ type: "output_text", text: "Working on it" }],
+    } }),
+  ].join("\n") + "\n");
+
+  await runPass(root, { codexSessionsRoot: sessionsRoot });
+
+  const head = store.config().head;
+  assert.ok(head);
+  const handoff = store.loadHandoff(head);
+  assert.equal(handoff.meta.tool, "codex");
+  assert.equal(handoff.meta.captureMode, "transcript");
+  assert.equal(handoff.meta.model, "gpt-5.5");
+  assert.equal(handoff.attachments.length, 1);
+  const saved = store.loadAttachment(handoff.attachments[0]!).toString("utf8");
+  assert.doesNotMatch(saved, new RegExp(secret));
+  assert.match(saved, /\[REDACTED:github-token\]/);
 });

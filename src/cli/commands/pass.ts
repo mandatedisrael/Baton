@@ -8,6 +8,7 @@ import type { Attachment, CaptureMode, Fidelity, Handoff, ToolId } from "../../s
 import { fallbackPatchOps, gatherFallbackSignal } from "../../distiller/fallback.ts";
 import { scrub, scrubDeep, type ScrubFinding } from "../../distiller/scrub.ts";
 import { parseClaudeCodeTranscript } from "../../distiller/capture/claude-code.ts";
+import { findLatestCodexSession, parseCodexTranscript } from "../../distiller/capture/codex.ts";
 import { transcriptAttachment } from "../../distiller/capture/transcript.ts";
 import { transcriptAttachmentId } from "../../distiller/checkpoint.ts";
 import { gradeHandoff } from "../../distiller/grade.ts";
@@ -19,6 +20,8 @@ import { createUploadJob } from "../../chain/queue.ts";
 export interface PassOptions {
   /** Show the distillation + change summary and require confirmation before sealing. */
   review?: boolean;
+  /** Override Codex session discovery for tests or managed installations. */
+  codexSessionsRoot?: string;
 }
 
 export interface PassReporter {
@@ -45,13 +48,10 @@ const CLI_REPORTER: PassReporter = {
 /**
  * `baton pass` — seal the current WorkingState into a handoff (commit).
  *
- * If micro-checkpoints captured a transcript (cursor records its path), the
- * baton is transcript-mode: the raw transcript travels as an attachment, the
- * tool is detected, and — with ANTHROPIC_API_KEY — a fidelity grader scores the
- * distillation against the source. Otherwise it falls back to enriching the
- * working state from the git tree. Either way: scrub → finalize → verify →
- * persist → advance head. Secrets are scrubbed before sealing; fidelity is null
- * until graded (honest, never faked).
+ * Claude Code supplies its transcript path through the checkpoint cursor.
+ * When that is absent, Baton discovers the newest Codex rollout for this exact
+ * project cwd. The scrubbed source travels as an attachment and, with
+ * ANTHROPIC_API_KEY, grades the structured handoff against the source.
  */
 export async function passBaton(
   cwd: string,
@@ -63,23 +63,32 @@ export async function passBaton(
   const state = store.loadWorkingState();
   const cursor = store.loadCursor();
 
-  // Locate the source transcript (if checkpoints recorded one).
+  // Prefer the explicitly checkpointed Claude transcript, then discover the
+  // latest Codex rollout scoped to this exact project root.
   let attachments: Attachment[] | undefined;
   let transcriptText: string | undefined;
   let transcriptFindings: ScrubFinding[] = [];
   let tool: ToolId = "other";
   let captureMode: CaptureMode = "fallback";
   let model: string | undefined;
-  if (cursor.transcriptPath && existsSync(cursor.transcriptPath)) {
+  const codexPath = cursor.transcriptPath
+    ? null
+    : findLatestCodexSession(store.root, opts.codexSessionsRoot);
+  const transcriptPath = cursor.transcriptPath && existsSync(cursor.transcriptPath)
+    ? cursor.transcriptPath
+    : codexPath;
+  if (transcriptPath) {
     try {
-      const scrubbedTranscript = scrub(readFileSync(cursor.transcriptPath, "utf8"));
+      const scrubbedTranscript = scrub(readFileSync(transcriptPath, "utf8"));
       transcriptText = scrubbedTranscript.clean;
       transcriptFindings = scrubbedTranscript.findings;
-      const session = parseClaudeCodeTranscript(transcriptText);
+      const session = transcriptPath === cursor.transcriptPath
+        ? parseClaudeCodeTranscript(transcriptText)
+        : parseCodexTranscript(transcriptText);
       const attId = transcriptAttachmentId(session);
       if (attId) {
         attachments = [transcriptAttachment(session, attId)];
-        tool = "claude-code";
+        tool = session.tool;
         captureMode = "transcript";
         model = session.model ?? undefined;
       }

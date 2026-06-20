@@ -130,7 +130,24 @@ export async function passBaton(
   // Review gate: show what's about to be sealed and require confirmation.
   if (opts.review) {
     const parent = config.head ? { id: config.head, handoff: store.loadHandoff(config.head) } : null;
-    reporter.write("\n" + renderReview(scrubbed, { tool, captureMode, parent }) + "\n");
+    reporter.write("\n" + renderReview(scrubbed, {
+      tool,
+      captureMode,
+      parent,
+      transcript: transcriptText && transcriptPath && attachments?.[0]
+        ? {
+            path: transcriptPath,
+            bytes: attachments[0].bytes,
+            lines: transcriptText === ""
+              ? 0
+              : transcriptText.endsWith("\n")
+                ? transcriptText.split("\n").length - 1
+                : transcriptText.split("\n").length,
+          }
+        : undefined,
+      scrubbedFindings: findings.map((finding) => ({ type: finding.type, count: finding.count })),
+      remoteRegistered: config.remote !== null,
+    }) + "\n");
     if (!(await reporter.confirm("Seal this baton?"))) {
       reporter.warn("aborted — nothing sealed");
       return { sealed: false };

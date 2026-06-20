@@ -224,7 +224,7 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 | `baton accept <file>` | Verify a recipient-owned, active `AccessCap` and join the shared project. |
 | `baton revoke <address>` | Revoke delegated access on-chain; future uncached decryptions are denied. |
 | `baton status` | Show the current working state. |
-| `baton pass` | Seal the working state into a baton (commit). |
+| `baton pass [--yes]` | Review and seal the working state into a baton; `--yes` explicitly bypasses confirmation. |
 | `baton log` | List batons, newest first (`*` marks the head). |
 | `baton show <id>` | Print a verified baton (short ids ok). |
 | `baton resume [id] [--tool <id>]` | Render the resume prompt for a baton (head if omitted). |

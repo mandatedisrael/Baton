@@ -71,3 +71,19 @@ test("review reports no distilled changes when nothing changed", () => {
   const out = renderReview(state, { tool: "claude-code", captureMode: "transcript", parent });
   assert.match(out, /no distilled changes/);
 });
+
+test("review discloses transcript, scrubbing, and remote delivery details", () => {
+  const state = build([{ kind: "set_mission", mission: "handoff safely" }]);
+  const out = renderReview(state, {
+    tool: "codex",
+    captureMode: "transcript",
+    parent: null,
+    transcript: { path: "/home/user/.codex/session.jsonl", bytes: 1234, lines: 42 },
+    scrubbedFindings: [{ type: "github-token", count: 2 }],
+    remoteRegistered: true,
+  });
+  assert.match(out, /session\.jsonl/);
+  assert.match(out, /1234 bytes · 42 lines · encrypted attachment/);
+  assert.match(out, /removed 2× github-token/);
+  assert.match(out, /encrypts to Walrus and anchors on Sui/);
+});

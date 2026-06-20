@@ -346,8 +346,8 @@ tool_timeout_sec = 120
     }, null, 2) + "\n");
   }
 
-  if (tool === "generic" || tool === "all") {
-    console.log("Generic / Claude Desktop / other MCP clients:");
+  if (tool === "opencode" || tool === "generic" || tool === "all") {
+    console.log("OpenCode / Generic / Claude Desktop / other MCP clients:");
     console.log(JSON.stringify({
       mcpServers: {
         baton: {

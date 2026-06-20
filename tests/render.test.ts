@@ -97,3 +97,12 @@ test("receiving-tool intro is tailored when provided", () => {
   });
   assert.match(out, /You are Codex resuming/);
 });
+
+test("OpenCode receives its own resume dialect", () => {
+  const { handoff, id } = buildHandoff();
+  const out = renderResumePrompt(handoff, {
+    chain: [{ shortId: shortId(id), tool: "opencode" }],
+    receivingTool: "opencode",
+  });
+  assert.match(out, /You are OpenCode resuming/);
+});

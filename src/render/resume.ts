@@ -30,6 +30,7 @@ const RECEIVER_INTRO: Partial<Record<ToolId, string>> = {
   "claude-code": "You are Claude Code resuming an in-progress task.",
   codex: "You are Codex resuming an in-progress task.",
   cursor: "You are resuming an in-progress task in Cursor.",
+  opencode: "You are OpenCode resuming an in-progress task.",
 };
 
 function bullets(items: string[]): string {

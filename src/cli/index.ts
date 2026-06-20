@@ -31,6 +31,7 @@ import { runAudit } from "./commands/audit.ts";
 import { TOOL_IDS, type ToolId } from "../schema/handoff.ts";
 import { RULES_TARGETS, type RulesFormat } from "../render/rules.ts";
 import { readFileSync } from "node:fs";
+import { runSetup, type SetupAgent } from "./commands/setup.ts";
 
 const USAGE = `baton — verifiable handoffs between coding agents (git for agent memory)
 
@@ -63,6 +64,7 @@ Commands:
   install      register the Claude Code checkpoint hook for this project
   uninstall    remove the Claude Code checkpoint hook
   mcp setup    print ready-to-paste MCP config for Codex / Cursor / generic clients
+  setup <agent> safely configure Baton for codex, claude-code, cursor, or all
   doctor       diagnose the installation and verify local batons (--network probes live endpoints)
 
 Options:
@@ -298,6 +300,15 @@ function main(argv: string[]): void {
       process.stderr.write("usage: baton mcp setup [codex | cursor | generic | all]\n");
       process.exitCode = 2;
       return;
+    }
+    case "setup": {
+      const target = rest[0];
+      if (rest.length !== 1 || !target || !["codex", "claude-code", "cursor", "all"].includes(target)) {
+        process.stderr.write("usage: baton setup <codex | claude-code | cursor | all>\n");
+        process.exitCode = 2;
+        return;
+      }
+      return runSetup(process.cwd(), target as SetupAgent | "all");
     }
     default:
       process.stderr.write(`baton: unknown command "${command}"\n\n${USAGE}`);

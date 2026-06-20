@@ -1,6 +1,6 @@
 {
   "name": "baton",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Git for agent memory — verifiable handoffs between coding agents, on Sui + Walrus + Seal",
   "repository": {
     "type": "git",

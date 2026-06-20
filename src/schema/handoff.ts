@@ -26,7 +26,9 @@ import {
 
 export const SCHEMA_VERSION = 1;
 
-export const TOOL_IDS = ["claude-code", "codex", "cursor", "chatgpt-web", "other"] as const;
+// Keep the original v1 tools in their historical order. This list validates
+// the wire format; it must never be reused as an on-chain numeric encoding.
+export const TOOL_IDS = ["claude-code", "codex", "cursor", "chatgpt-web", "other", "opencode"] as const;
 export type ToolId = (typeof TOOL_IDS)[number];
 
 export const CAPTURE_MODES = ["transcript", "self-report", "import", "fallback"] as const;

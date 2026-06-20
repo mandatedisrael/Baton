@@ -7,11 +7,12 @@ import { hashCanonical } from "../core/hash.ts";
 import type { LoadedIdentity } from "./identity.ts";
 import { signTransactionWithZkLogin } from "./zklogin.ts";
 import { getEd25519Keypair } from "./identity.ts";
-import { CAPTURE_MODES, TOOL_IDS, type Handoff } from "../schema/handoff.ts";
+import { CAPTURE_MODES, type Handoff } from "../schema/handoff.ts";
 import type { RemoteProjectConfig } from "../schema/project.ts";
 import { parseUploadJob, type RemoteSidecar, type UploadJob } from "../schema/remote.ts";
 import { ProjectStore } from "../store/project.ts";
 import { markPublicationFailed } from "./encryption.ts";
+import { onChainToolCode } from "./tool-code.ts";
 
 const utf8 = (value: string): Uint8Array => new TextEncoder().encode(value);
 
@@ -87,7 +88,7 @@ export function buildAnchorTransaction(input: {
       tx.pure.vector("u8", utf8(graderModel)),
       tx.pure.u8(rubricVersion(input.handoff.fidelity.rubricVersion)),
       tx.pure.u8(CAPTURE_MODES.indexOf(input.handoff.meta.captureMode)),
-      tx.pure.u8(TOOL_IDS.indexOf(input.handoff.meta.tool)),
+      tx.pure.u8(onChainToolCode(input.handoff.meta.tool)),
       tx.pure.u64(BigInt(Date.parse(input.handoff.meta.timestamp))),
       tx.pure.vector("vector<u8>", attachments.map(({ attachment }) => [...utf8(attachment.id)])),
       tx.pure.vector("vector<u8>", attachments.map(({ blobId }) => [...utf8(blobId)])),

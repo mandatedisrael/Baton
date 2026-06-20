@@ -8,6 +8,7 @@ import { ProjectStore } from "../src/store/project.ts";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { onChainToolCode } from "../src/chain/tool-code.ts";
 
 const remote: RemoteProjectConfig = {
   network: "testnet",
@@ -69,6 +70,15 @@ test("buildAnchorTransaction targets the deployed contract with complete manifes
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }
+});
+
+test("on-chain tool codes remain compatible with the deployed v2 contract", () => {
+  assert.equal(onChainToolCode("claude-code"), 0);
+  assert.equal(onChainToolCode("codex"), 1);
+  assert.equal(onChainToolCode("cursor"), 2);
+  assert.equal(onChainToolCode("chatgpt-web"), 3);
+  assert.equal(onChainToolCode("other"), 4);
+  assert.equal(onChainToolCode("opencode"), 4);
 });
 
 test("buildAnchorTransaction refuses unpublished payloads", () => {

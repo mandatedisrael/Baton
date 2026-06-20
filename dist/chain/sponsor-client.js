@@ -1,4 +1,7 @@
+import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { BatonError } from "../core/errors.js";
+import { signTransactionWithZkLogin } from "./zklogin.js";
+import { getEd25519Keypair } from "./identity.js";
 import { verifySponsoredRegistrationEnvelope } from "./sponsorship.js";
 export function validateSponsorUrl(value) {
     let url;
@@ -75,23 +78,62 @@ function preparedEnvelope(value) {
 }
 export async function registerProjectWithSponsor(input) {
     const base = validateSponsorUrl(input.sponsorUrl);
-    const sender = input.userKeypair.toSuiAddress();
-    const envelope = preparedEnvelope(await post(`${base}/v1/register/prepare`, {
-        token: input.inviteToken,
-        sender,
-        projectId: input.projectId,
-    }, 15_000));
-    const bytes = await verifySponsoredRegistrationEnvelope({
-        envelope,
-        packageId: input.packageId,
-        projectId: input.projectId,
-        sender,
-    });
-    const { signature } = await input.userKeypair.signTransaction(bytes);
+    let sender;
+    let requestId;
+    let userSignature;
+    if (input.identity) {
+        sender = input.identity.record.address;
+        const envelope = preparedEnvelope(await post(`${base}/v1/register/prepare`, {
+            token: input.inviteToken,
+            sender,
+            projectId: input.projectId,
+        }, 15_000));
+        requestId = envelope.requestId;
+        const bytes = await verifySponsoredRegistrationEnvelope({
+            envelope,
+            packageId: input.packageId,
+            projectId: input.projectId,
+            sender,
+        });
+        if (input.identity.scheme === "ZKLOGIN") {
+            const rpcUrl = "https://fullnode.testnet.sui.io:443";
+            const client = new SuiJsonRpcClient({ network: "testnet", url: rpcUrl });
+            userSignature = await signTransactionWithZkLogin({
+                session: input.identity.session,
+                client,
+                transaction: bytes,
+            });
+        }
+        else {
+            const kp = getEd25519Keypair(input.identity);
+            const { signature } = await kp.signTransaction(bytes);
+            userSignature = signature;
+        }
+    }
+    else if (input.userKeypair) {
+        sender = input.userKeypair.toSuiAddress();
+        const envelope = preparedEnvelope(await post(`${base}/v1/register/prepare`, {
+            token: input.inviteToken,
+            sender,
+            projectId: input.projectId,
+        }, 15_000));
+        requestId = envelope.requestId;
+        const bytes = await verifySponsoredRegistrationEnvelope({
+            envelope,
+            packageId: input.packageId,
+            projectId: input.projectId,
+            sender,
+        });
+        const { signature } = await input.userKeypair.signTransaction(bytes);
+        userSignature = signature;
+    }
+    else {
+        throw new BatonError("INVALID_STATE", "sponsored registration requires userKeypair or identity");
+    }
     const executed = strings(await post(`${base}/v1/register/execute`, {
         token: input.inviteToken,
-        requestId: envelope.requestId,
-        userSignature: signature,
+        requestId,
+        userSignature,
     }, 60_000), ["digest", "projectObjectId", "ownerCapId"]);
     return executed;
 }

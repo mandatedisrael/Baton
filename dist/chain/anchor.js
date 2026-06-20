@@ -3,10 +3,13 @@ import { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiObjectId } from "@mysten/sui/utils";
 import { BatonError } from "../core/errors.js";
 import { hashCanonical } from "../core/hash.js";
-import { CAPTURE_MODES, TOOL_IDS } from "../schema/handoff.js";
+import { signTransactionWithZkLogin } from "./zklogin.js";
+import { getEd25519Keypair } from "./identity.js";
+import { CAPTURE_MODES } from "../schema/handoff.js";
 import { parseUploadJob } from "../schema/remote.js";
 import { ProjectStore } from "../store/project.js";
 import { markPublicationFailed } from "./encryption.js";
+import { onChainToolCode } from "./tool-code.js";
 const utf8 = (value) => new TextEncoder().encode(value);
 function hashBytes(value, label) {
     if (!/^[a-f0-9]{64}$/.test(value)) {
@@ -72,7 +75,7 @@ export function buildAnchorTransaction(input) {
             tx.pure.vector("u8", utf8(graderModel)),
             tx.pure.u8(rubricVersion(input.handoff.fidelity.rubricVersion)),
             tx.pure.u8(CAPTURE_MODES.indexOf(input.handoff.meta.captureMode)),
-            tx.pure.u8(TOOL_IDS.indexOf(input.handoff.meta.tool)),
+            tx.pure.u8(onChainToolCode(input.handoff.meta.tool)),
             tx.pure.u64(BigInt(Date.parse(input.handoff.meta.timestamp))),
             tx.pure.vector("vector<u8>", attachments.map(({ attachment }) => [...utf8(attachment.id)])),
             tx.pure.vector("vector<u8>", attachments.map(({ blobId }) => [...utf8(blobId)])),
@@ -123,11 +126,28 @@ async function submitAnchor(input) {
     if (existing)
         return existing;
     const transaction = buildAnchorTransaction(input);
-    const response = await input.client.signAndExecuteTransaction({
-        transaction,
-        signer: input.keypair,
-        options: { showEffects: true },
-    });
+    let response;
+    if (input.identity && input.identity.scheme === "ZKLOGIN") {
+        const zkSig = await signTransactionWithZkLogin({
+            session: input.identity.session,
+            client: input.client,
+            transaction,
+        });
+        const bytes = await transaction.build({ client: input.client });
+        response = await input.client.executeTransactionBlock({
+            transactionBlock: bytes,
+            signature: zkSig,
+            options: { showEffects: true },
+        });
+    }
+    else {
+        const kp = input.keypair ?? getEd25519Keypair(input.identity);
+        response = await input.client.signAndExecuteTransaction({
+            transaction,
+            signer: kp,
+            options: { showEffects: true },
+        });
+    }
     if (response.effects?.status.status !== "success") {
         throw new BatonError("IO_ERROR", `Sui anchoring failed: ${response.effects?.status.error ?? "unknown error"}`);
     }

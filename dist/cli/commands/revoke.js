@@ -9,9 +9,9 @@ export async function runRevoke(cwd, grantee, identityPath) {
     const remote = store.config().remote;
     if (!remote)
         throw new BatonError("INVALID_STATE", "project is local-only — there is no remote access to revoke");
-    const { keypair } = loadIdentity(identityPath);
+    const loaded = loadIdentity(identityPath);
     const client = new SuiJsonRpcClient({ network: remote.network, url: remote.rpcUrl });
-    const digest = await revokeAccessOnSui({ client, keypair, remote, grantee });
+    const digest = await revokeAccessOnSui({ client, identity: loaded, remote, grantee });
     ok(`read access revoked for ${grantee}`);
     ok(`Sui transaction: ${digest}`);
 }

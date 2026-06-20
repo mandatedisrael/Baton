@@ -13,7 +13,9 @@
  */
 import { arr, isoDatetime, literal, nullable, num, obj, oneOf, optStr, str, ValidationError, } from "./validate.js";
 export const SCHEMA_VERSION = 1;
-export const TOOL_IDS = ["claude-code", "codex", "cursor", "chatgpt-web", "other"];
+// Keep the original v1 tools in their historical order. This list validates
+// the wire format; it must never be reused as an on-chain numeric encoding.
+export const TOOL_IDS = ["claude-code", "codex", "cursor", "chatgpt-web", "other", "opencode"];
 export const CAPTURE_MODES = ["transcript", "self-report", "import", "fallback"];
 export const HANDOFF_STATUSES = ["done", "in-progress", "blocked"];
 export const ATTACHMENT_KINDS = ["transcript", "diff", "plan", "other"];

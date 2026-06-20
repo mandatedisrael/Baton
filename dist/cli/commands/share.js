@@ -13,10 +13,10 @@ export async function runShare(cwd, grantee, outputPath, identityPath) {
         throw new BatonError("INVALID_STATE", "project is local-only — register it before sharing");
     if (!config.head)
         throw new BatonError("INVALID_STATE", "pass and publish at least one baton before sharing");
-    const { keypair } = loadIdentity(identityPath);
+    const loaded = loadIdentity(identityPath);
     const client = new SuiJsonRpcClient({ network: config.remote.network, url: config.remote.rpcUrl });
     const grantedAt = new Date().toISOString();
-    const result = await grantAccessOnSui({ client, keypair, remote: config.remote, grantee });
+    const result = await grantAccessOnSui({ client, identity: loaded, remote: config.remote, grantee });
     const invitation = {
         schemaVersion: 1,
         projectId: config.projectId,

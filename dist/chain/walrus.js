@@ -1,6 +1,15 @@
 import { SuiGrpcClient } from "@mysten/sui/grpc";
-import { walrus } from "@mysten/walrus";
+import { blobIdFromInt, walrus } from "@mysten/walrus";
 import { BatonError } from "../core/errors.js";
+export async function reconcileCertifiedUpload(resume, getBlobObject) {
+    if (!resume || resume.step !== "uploaded")
+        return null;
+    const blob = await getBlobObject(resume.blobObjectId);
+    if (blobIdFromInt(blob.blob_id) !== resume.blobId) {
+        throw new BatonError("HASH_MISMATCH", "Walrus blob object identity changed while reconciling certification");
+    }
+    return blob.certified_epoch === null ? null : { blobId: resume.blobId };
+}
 /**
  * Drive an official Walrus write flow and durably expose every resumable step.
  * A blob is successful only after the SDK returns its certified checkpoint.
@@ -38,6 +47,9 @@ export function createWalrusUploader(input) {
     }));
     return {
         async upload(request) {
+            const reconciled = await reconcileCertifiedUpload(request.resume, (id) => client.walrus.getBlobObject(id));
+            if (reconciled)
+                return reconciled;
             const flow = client.walrus.writeBlobFlow({
                 blob: request.data,
                 ...(request.resume ? { resume: request.resume } : {}),

@@ -1,9 +1,10 @@
 import { BatonError } from "../core/errors.js";
 import { hashCanonical } from "../core/hash.js";
-import { CAPTURE_MODES, parseHandoff, TOOL_IDS } from "../schema/handoff.js";
+import { CAPTURE_MODES, parseHandoff } from "../schema/handoff.js";
 import { ProjectStore } from "../store/project.js";
 import { decryptBlob } from "./decryption.js";
 import { fetchVerifiedCiphertext } from "./retrieval.js";
+import { onChainToolCode } from "./tool-code.js";
 function rubricVersion(value) {
     if (value === undefined)
         return 0;
@@ -20,7 +21,7 @@ function assertManifestMatchesHandoff(manifest, handoff) {
         manifest.graderModel === (handoff.fidelity.graderModel ?? "") &&
         manifest.rubricVersion === rubricVersion(handoff.fidelity.rubricVersion) &&
         manifest.captureMode === CAPTURE_MODES.indexOf(handoff.meta.captureMode) &&
-        manifest.tool === TOOL_IDS.indexOf(handoff.meta.tool) &&
+        manifest.tool === onChainToolCode(handoff.meta.tool) &&
         manifest.timestampMs === timestampMs;
     if (!metadataMatches) {
         throw new BatonError("HASH_MISMATCH", "decrypted handoff metadata does not match its on-chain manifest");

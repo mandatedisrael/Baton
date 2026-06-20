@@ -2,6 +2,7 @@ const RECEIVER_INTRO = {
     "claude-code": "You are Claude Code resuming an in-progress task.",
     codex: "You are Codex resuming an in-progress task.",
     cursor: "You are resuming an in-progress task in Cursor.",
+    opencode: "You are OpenCode resuming an in-progress task.",
 };
 function bullets(items) {
     return items.map((i) => `- ${i}`).join("\n");
@@ -22,7 +23,11 @@ export function renderResumePrompt(handoff, ctx) {
     sections.push(`# Resuming baton ${self ? self.shortId : ""}`.trimEnd() +
         `\n\n${intro} The context below is a distilled handoff from a previous agent ` +
         `session — treat it as ground truth for what has already happened. Do not redo ` +
-        `work that is already done, and do not repeat anything in the graveyard.`);
+        `work that is already done, and do not repeat anything in the graveyard.` +
+        `\n\nYou have access to Baton MCP tools (if the baton-mcp server is connected in this environment): ` +
+        `use baton_status to inspect state, baton_resume for fresh context, baton_search for prior details, ` +
+        `baton_verify to cross-check citations, baton_checkpoint to save progress mid-session, and baton_pass ` +
+        `(with confirm=true) only when the user explicitly wants to seal an immutable handoff. Prefer tool calls over guessing.`);
     const lineage = lineageLine(ctx.chain);
     if (lineage)
         sections.push(lineage);

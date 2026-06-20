@@ -2,12 +2,13 @@ import { ProjectStore } from "../../store/project.js";
 import { findProjectRoot } from "../../store/paths.js";
 import { hooksInstalled } from "../hooks.js";
 import { fail, ok, warn } from "../output.js";
-import { loadIdentity } from "../../chain/identity.js";
+import { loadIdentity, isZkLoginIdentity } from "../../chain/identity.js";
+import { probeHttpsEndpoint } from "../../chain/network-health.js";
 /**
  * `baton doctor` — diagnose the local installation and project.
  * Every check is independent; doctor never throws, it reports.
  */
-export function runDoctor(cwd) {
+export async function runDoctor(cwd, options = {}) {
     let healthy = true;
     const check = (label, fn) => {
         try {
@@ -53,11 +54,36 @@ export function runDoctor(cwd) {
         return `${jobs.length} job(s), ${open} open`;
     });
     if (store.config().remote) {
-        check("Sui identity", () => loadIdentity().record.address);
+        const id = loadIdentity();
+        const scheme = isZkLoginIdentity(id) ? "zkLogin (google)" : "Ed25519";
+        check("Sui identity", () => `${id.record.address} (${scheme})`);
         check("remote project", () => {
             const remote = store.config().remote;
             return `${remote.network} · ${remote.projectObjectId}`;
         });
+        if (options.network) {
+            const remote = store.config().remote;
+            const endpoints = [
+                ["Sui RPC", remote.rpcUrl],
+                ["Walrus upload relay", remote.walrus.uploadRelayUrl],
+                ["Walrus aggregator", remote.walrus.aggregatorUrl],
+                ...remote.seal.serverConfigs
+                    .filter((server) => server.aggregatorUrl)
+                    .map((server, index) => [`Seal aggregator ${index + 1}`, server.aggregatorUrl]),
+            ];
+            const probes = await Promise.allSettled(endpoints.map(async ([label, url]) => ({ label, result: await probeHttpsEndpoint(url) })));
+            for (let index = 0; index < probes.length; index += 1) {
+                const [label] = endpoints[index];
+                const probe = probes[index];
+                if (probe.status === "fulfilled") {
+                    ok(`${label}: reachable · ${probe.value.result.address} · HTTP ${probe.value.result.status}`);
+                }
+                else {
+                    healthy = false;
+                    fail(`${label}: ${probe.reason instanceof Error ? probe.reason.message : String(probe.reason)}`);
+                }
+            }
+        }
     }
     else {
         warn("remote project: not registered — local handoffs still work; run `baton login` then `baton register`");

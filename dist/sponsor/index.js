@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
-import { loadIdentity } from "../chain/identity.js";
+import { loadIdentity, requireEd25519Identity } from "../chain/identity.js";
 import { BATON_CORE_TESTNET_ORIGINAL_PACKAGE, BATON_CORE_TESTNET_PACKAGE, TESTNET_RPC_URL, } from "../chain/networks.js";
 import { SPONSORED_REGISTRATION_GAS_BUDGET } from "../chain/sponsorship.js";
 import { BatonError } from "../core/errors.js";
@@ -100,7 +100,8 @@ async function main() {
         throw new BatonError("INVALID_STATE", "--port must be 1–65535");
     }
     const identityPath = flag(args, "--identity") ?? process.env.BATON_SPONSOR_IDENTITY;
-    const { record, keypair } = loadIdentity(identityPath);
+    const loaded = loadIdentity(identityPath);
+    const { record, keypair } = requireEd25519Identity(loaded);
     const client = new SuiJsonRpcClient({ network: "testnet", url: TESTNET_RPC_URL });
     const recovered = await reconcileSponsorState({
         client,

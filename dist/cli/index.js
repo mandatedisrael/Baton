@@ -31,13 +31,14 @@ import { runAudit } from "./commands/audit.js";
 import { TOOL_IDS } from "../schema/handoff.js";
 import { RULES_TARGETS } from "../render/rules.js";
 import { readFileSync } from "node:fs";
+import { runSetup } from "./commands/setup.js";
 const USAGE = `baton — verifiable handoffs between coding agents (git for agent memory)
 
 Usage: baton <command>
 
 Commands:
   init         initialize a baton project in the current directory
-  login        create or load the user's protected Sui identity
+  login        create or load the user's protected Sui identity (--zk for Google zkLogin with real address)
   faucet       fund that identity from the official Testnet faucet
   fund-storage exchange Testnet SUI for WAL storage funds
   register     register this project on Sui Testnet
@@ -61,13 +62,15 @@ Commands:
   render <fmt> project a handoff into a rules file (${Object.keys(RULES_TARGETS).join(" | ")})
   install      register the Claude Code checkpoint hook for this project
   uninstall    remove the Claude Code checkpoint hook
-  doctor       diagnose the installation and verify local batons
+  mcp setup    print ready-to-paste MCP config for Codex / Cursor / generic clients
+  setup <agent> safely configure Baton for codex, claude-code, cursor, or all
+  doctor       diagnose the installation and verify local batons (--network probes live endpoints)
 
 Options:
   -h, --help        show this help
   -v, --version     show version
   --no-hooks        (init) skip Claude Code hook installation
-  --review          (pass) preview the distillation and confirm before sealing
+  --yes             (pass) bypass the default review confirmation
   --tool <id>       (resume) receiving tool dialect: ${TOOL_IDS.join(" | ")}
   --write           (render) upsert the rules file instead of printing to stdout
   --package <id>    (register) override the canonical Baton package
@@ -94,8 +97,19 @@ function main(argv) {
             return;
         case "init":
             return runInit(process.cwd(), { hooks: !rest.includes("--no-hooks") });
-        case "login":
-            return runLogin();
+        case "login": {
+            const zk = rest.includes("--zk") || rest.includes("--google");
+            let clientId;
+            for (let i = 0; i < rest.length; i++) {
+                const val = rest[i + 1];
+                if (rest[i] === "--client-id" && val && !val.startsWith("--")) {
+                    clientId = val;
+                    break;
+                }
+            }
+            void runLogin({ zk, clientId }).catch(die);
+            return;
+        }
         case "faucet":
             void runFaucet().catch(die);
             return;
@@ -203,7 +217,7 @@ function main(argv) {
         case "status":
             return runStatus(process.cwd());
         case "pass":
-            void runPass(process.cwd(), { review: rest.includes("--review") }).catch(die);
+            void runPass(process.cwd(), { review: !rest.includes("--yes") }).catch(die);
             return;
         case "log":
             return runLog(process.cwd());
@@ -272,12 +286,71 @@ function main(argv) {
             return runRender(process.cwd(), format, id, write);
         }
         case "doctor":
-            return runDoctor(process.cwd());
+            void runDoctor(process.cwd(), { network: rest.includes("--network") }).catch(die);
+            return;
+        case "mcp": {
+            const sub = rest[0];
+            if (sub === "setup" || sub === "config") {
+                const tool = rest[1] || "all";
+                printMcpSetup(tool);
+                return;
+            }
+            process.stderr.write("usage: baton mcp setup [codex | cursor | generic | all]\n");
+            process.exitCode = 2;
+            return;
+        }
+        case "setup": {
+            const target = rest[0];
+            if (rest.length !== 1 || !target || !["codex", "claude-code", "cursor", "all"].includes(target)) {
+                process.stderr.write("usage: baton setup <codex | claude-code | cursor | all>\n");
+                process.exitCode = 2;
+                return;
+            }
+            return runSetup(process.cwd(), target);
+        }
         default:
             process.stderr.write(`baton: unknown command "${command}"\n\n${USAGE}`);
             process.exitCode = 2;
             return;
     }
+}
+function printMcpSetup(tool) {
+    const project = process.cwd();
+    const cmd = "baton-mcp";
+    console.log("Copy the relevant section into your MCP client config:\n");
+    if (tool === "codex" || tool === "all") {
+        console.log("Codex (add via `codex mcp add baton --` or edit .codex/config.toml):");
+        console.log(`[mcp_servers.baton]
+command = "${cmd}"
+args = ["--project", "${project}"]
+required = true
+startup_timeout_sec = 20
+tool_timeout_sec = 120
+`);
+    }
+    if (tool === "cursor" || tool === "all") {
+        console.log("Cursor (paste into Cursor settings → MCP or .cursor/mcp.json):");
+        console.log(JSON.stringify({
+            mcpServers: {
+                baton: {
+                    command: cmd,
+                    args: ["--project", project],
+                },
+            },
+        }, null, 2) + "\n");
+    }
+    if (tool === "opencode" || tool === "generic" || tool === "all") {
+        console.log("OpenCode / Generic / Claude Desktop / other MCP clients:");
+        console.log(JSON.stringify({
+            mcpServers: {
+                baton: {
+                    command: cmd,
+                    args: ["--project", project],
+                },
+            },
+        }, null, 2) + "\n");
+    }
+    console.log("After configuring, run `baton resume` (or tell your agent to call the baton_resume tool) when starting a new session.");
 }
 try {
     main(process.argv.slice(2));

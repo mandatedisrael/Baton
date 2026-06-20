@@ -2,6 +2,7 @@ import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiObjectId } from "@mysten/sui/utils";
 import { BatonError } from "../core/errors.js";
+import { signTransactionWithZkLogin } from "./zklogin.js";
 export function buildRegistrationTransaction(packageId, projectId) {
     const normalizedPackage = normalizeSuiObjectId(packageId);
     const projectBytes = new TextEncoder().encode(projectId);
@@ -28,15 +29,42 @@ export function extractRegistrationObjects(packageId, changes) {
 export async function registerProjectOnSui(input) {
     const transaction = buildRegistrationTransaction(input.packageId, input.projectId);
     let response;
-    try {
-        response = await input.client.signAndExecuteTransaction({
+    if (input.identity && input.identity.scheme === "ZKLOGIN") {
+        // Real zkLogin signing path (production)
+        const sender = input.identity.session.address;
+        transaction.setSender(sender);
+        const zkSig = await signTransactionWithZkLogin({
+            session: input.identity.session,
+            client: input.client,
             transaction,
-            signer: input.keypair,
-            options: { showEffects: true, showObjectChanges: true },
         });
+        try {
+            const bytes = await transaction.build({ client: input.client });
+            response = await input.client.executeTransactionBlock({
+                transactionBlock: bytes,
+                signature: zkSig,
+                options: { showEffects: true, showObjectChanges: true },
+            });
+        }
+        catch (err) {
+            throw new BatonError("IO_ERROR", `Sui zkLogin registration request failed: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+        }
     }
-    catch (err) {
-        throw new BatonError("IO_ERROR", `Sui registration request failed: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+    else {
+        // Legacy / ED25519 path
+        const kp = input.keypair ?? input.identity?.keypair;
+        if (!kp)
+            throw new BatonError("INVALID_STATE", "No signer provided for registration");
+        try {
+            response = await input.client.signAndExecuteTransaction({
+                transaction,
+                signer: kp,
+                options: { showEffects: true, showObjectChanges: true },
+            });
+        }
+        catch (err) {
+            throw new BatonError("IO_ERROR", `Sui registration request failed: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+        }
     }
     if (response.effects?.status.status !== "success") {
         throw new BatonError("IO_ERROR", `Sui registration failed: ${response.effects?.status.error ?? response.errors?.join("; ") ?? "unknown error"}`);

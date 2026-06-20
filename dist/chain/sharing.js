@@ -2,6 +2,8 @@ import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
 import { BatonError } from "../core/errors.js";
+import { signTransactionWithZkLogin } from "./zklogin.js";
+import { getEd25519Keypair } from "./identity.js";
 function ownerCap(remote) {
     if (remote.authority.kind !== "owner") {
         throw new BatonError("INVALID_STATE", "only the project owner can manage delegated access");
@@ -48,14 +50,30 @@ export function extractGrantedAccessCap(packageId, grantee, changes) {
     }
     return created.objectId;
 }
-async function execute(client, keypair, transaction, label) {
+async function execute(client, loaded, transaction, label) {
     let response;
     try {
-        response = await client.signAndExecuteTransaction({
-            transaction,
-            signer: keypair,
-            options: { showEffects: true, showObjectChanges: true },
-        });
+        if (loaded.scheme === "ZKLOGIN") {
+            const zkSig = await signTransactionWithZkLogin({
+                session: loaded.session,
+                client,
+                transaction,
+            });
+            const bytes = await transaction.build({ client });
+            response = await client.executeTransactionBlock({
+                transactionBlock: bytes,
+                signature: zkSig,
+                options: { showEffects: true, showObjectChanges: true },
+            });
+        }
+        else {
+            const keypair = getEd25519Keypair(loaded);
+            response = await client.signAndExecuteTransaction({
+                transaction,
+                signer: keypair,
+                options: { showEffects: true, showObjectChanges: true },
+            });
+        }
     }
     catch (err) {
         throw new BatonError("IO_ERROR", `${label} request failed: ${err instanceof Error ? err.message : String(err)}`, {
@@ -75,7 +93,7 @@ async function execute(client, keypair, transaction, label) {
 }
 export async function grantAccessOnSui(input) {
     const grantee = normalizeSuiAddress(input.grantee);
-    const response = await execute(input.client, input.keypair, buildGrantAccessTransaction(input.remote, grantee), "sharing transaction");
+    const response = await execute(input.client, input.identity, buildGrantAccessTransaction(input.remote, grantee), "sharing transaction");
     if (!response.objectChanges) {
         throw new BatonError("INVALID_STATE", "sharing transaction omitted object changes");
     }
@@ -86,7 +104,7 @@ export async function grantAccessOnSui(input) {
     };
 }
 export async function revokeAccessOnSui(input) {
-    const response = await execute(input.client, input.keypair, buildRevokeAccessTransaction(input.remote, input.grantee), "revocation transaction");
+    const response = await execute(input.client, input.identity, buildRevokeAccessTransaction(input.remote, input.grantee), "revocation transaction");
     return response.digest;
 }
 function moveFields(value) {

@@ -2,7 +2,8 @@ import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { fetchRemoteManifest } from "../chain/manifest.js";
 import { recoverRemoteHandoff, verifyRemoteHandoff } from "../chain/recovery.js";
 import { createWalrusRetriever } from "../chain/retrieval.js";
-import { loadIdentity } from "../chain/identity.js";
+import { loadIdentity, getIdentityAddress, requireEd25519Identity, isZkLoginIdentity } from "../chain/identity.js";
+import { loadEphemeralFromSession } from "../chain/zklogin.js";
 import { createSealPayloadDecryptor } from "../chain/seal.js";
 import { BatonError } from "../core/errors.js";
 import { ProjectStore } from "../store/project.js";
@@ -35,10 +36,13 @@ export async function recoverHandoffFromRemote(store, handoffId, identityPath) {
     if (!remote) {
         throw new BatonError("INVALID_STATE", "project is local-only — register it before remote recovery");
     }
-    const { keypair } = loadIdentity(identityPath);
+    const loaded = loadIdentity(identityPath);
     const client = new SuiJsonRpcClient({ network: remote.network, url: remote.rpcUrl });
     const manifest = await fetchRemoteManifest({ client, remote, handoffId });
     const retriever = createWalrusRetriever({ aggregatorUrl: remote.walrus.aggregatorUrl });
+    const keypair = isZkLoginIdentity(loaded)
+        ? loadEphemeralFromSession(loaded.session)
+        : requireEd25519Identity(loaded).keypair;
     const decryptor = createSealPayloadDecryptor({
         network: remote.network,
         rpcUrl: remote.rpcUrl,
@@ -54,10 +58,13 @@ export async function auditHandoffFromRemote(store, handoffId, identityPath) {
     const remote = store.config().remote;
     if (!remote)
         throw new BatonError("INVALID_STATE", "project is local-only — register it before remote audit");
-    const { keypair } = loadIdentity(identityPath);
+    const loaded = loadIdentity(identityPath);
     const client = new SuiJsonRpcClient({ network: remote.network, url: remote.rpcUrl });
     const manifest = await fetchRemoteManifest({ client, remote, handoffId });
     const retriever = createWalrusRetriever({ aggregatorUrl: remote.walrus.aggregatorUrl });
+    const keypair = isZkLoginIdentity(loaded)
+        ? loadEphemeralFromSession(loaded.session)
+        : requireEd25519Identity(loaded).keypair;
     const decryptor = createSealPayloadDecryptor({
         network: remote.network,
         rpcUrl: remote.rpcUrl,

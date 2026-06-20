@@ -15,6 +15,20 @@ export function renderReview(next, info) {
     out.push("─".repeat(60));
     out.push(`mission   ${next.mission || "(not set)"}`);
     out.push(`status    ${next.status}`);
+    if (info.transcript) {
+        out.push(`source    ${info.transcript.path}`);
+        out.push(`transcript ${info.transcript.bytes} bytes · ${info.transcript.lines} lines · encrypted attachment`);
+    }
+    else {
+        out.push("transcript none — working-tree fallback only");
+    }
+    const scrubbed = info.scrubbedFindings ?? [];
+    out.push(scrubbed.length > 0
+        ? `secrets   removed ${scrubbed.map((finding) => `${finding.count}× ${finding.type}`).join(", ")}`
+        : "secrets   no recognized secret patterns found");
+    out.push(info.remoteRegistered
+        ? "delivery  local publication queue; `baton publish` encrypts to Walrus and anchors on Sui"
+        : "delivery  local publication queue only; project is not registered remotely");
     if (next.decisions.length > 0) {
         out.push(`\ndecisions (${next.decisions.length})`);
         out.push(bullets(next.decisions.map(decisionLine)));

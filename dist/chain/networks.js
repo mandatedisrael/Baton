@@ -1,4 +1,5 @@
-export const TESTNET_RPC_URL = "https://fullnode.testnet.sui.io:443";
+/** Canonical Testnet RPC host; avoids the resolver-fragile legacy CNAME. */
+export const TESTNET_RPC_URL = "https://public-rpc.sui-testnet.mystenlabs.com";
 export const BATON_CORE_TESTNET_PACKAGE = "0xd92b150b57ef31defb5b9ddd5a155102efe1c34058a19fdb30cbe4f4a46aa3e3";
 export const BATON_CORE_TESTNET_ORIGINAL_PACKAGE = "0x74020a1a00779799768a5145bd2734f3e724d2826c5e8d610f345c2c036b090e";
 export const BATON_CORE_TESTNET_PUBLISH_TX = "FzC3a2mWPB3T7F1iE43rDXgoooNK2M719sGkr1DjAeZy";

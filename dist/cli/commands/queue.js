@@ -3,7 +3,8 @@ import { ProjectStore } from "../../store/project.js";
 import { encryptQueuedJob } from "../../chain/payloads.js";
 import { createSealPayloadEncryptor } from "../../chain/seal.js";
 import { BatonError } from "../../core/errors.js";
-import { loadIdentity } from "../../chain/identity.js";
+import { loadIdentity, isZkLoginIdentity, requireEd25519Identity } from "../../chain/identity.js";
+import { loadEphemeralFromSession } from "../../chain/zklogin.js";
 import { createWalrusUploader } from "../../chain/walrus.js";
 import { uploadQueuedJob } from "../../chain/upload.js";
 import { anchorQueuedJob } from "../../chain/anchor.js";
@@ -54,7 +55,10 @@ export async function runQueueUpload(cwd, identityPath) {
     if (!remote) {
         throw new BatonError("INVALID_STATE", "project is local-only — run `baton login` then `baton register`");
     }
-    const { keypair } = loadIdentity(identityPath);
+    const loaded = loadIdentity(identityPath);
+    const keypair = isZkLoginIdentity(loaded)
+        ? loadEphemeralFromSession(loaded.session)
+        : requireEd25519Identity(loaded).keypair;
     const uploader = createWalrusUploader({ remote, keypair });
     const jobs = store.listUploadJobs();
     const unencrypted = jobs.filter((job) => job.blobs.some((blob) => blob.status === "pending"));
@@ -86,7 +90,7 @@ export async function runQueueAnchor(cwd, identityPath) {
     if (!remote) {
         throw new BatonError("INVALID_STATE", "project is local-only — run `baton login` then `baton register`");
     }
-    const { keypair } = loadIdentity(identityPath);
+    const loaded = loadIdentity(identityPath);
     const client = new SuiJsonRpcClient({ network: remote.network, url: remote.rpcUrl });
     const jobs = store.listUploadJobs();
     const notUploaded = jobs.filter((job) => job.blobs.some((blob) => blob.status !== "uploaded"));
@@ -104,7 +108,7 @@ export async function runQueueAnchor(cwd, identityPath) {
             store,
             handoffId: queued.handoffId,
             client,
-            keypair,
+            identity: loaded,
             remote,
         });
         if (result.job.status === "failed" || !result.sidecar) {

@@ -7,6 +7,7 @@ import { ProjectStore } from "../../store/project.js";
 import { fallbackPatchOps, gatherFallbackSignal } from "../../distiller/fallback.js";
 import { scrub, scrubDeep } from "../../distiller/scrub.js";
 import { parseClaudeCodeTranscript } from "../../distiller/capture/claude-code.js";
+import { findLatestCodexSession, parseCodexTranscript } from "../../distiller/capture/codex.js";
 import { transcriptAttachment } from "../../distiller/capture/transcript.js";
 import { transcriptAttachmentId } from "../../distiller/checkpoint.js";
 import { gradeHandoff } from "../../distiller/grade.js";
@@ -23,36 +24,42 @@ const CLI_REPORTER = {
 /**
  * `baton pass` — seal the current WorkingState into a handoff (commit).
  *
- * If micro-checkpoints captured a transcript (cursor records its path), the
- * baton is transcript-mode: the raw transcript travels as an attachment, the
- * tool is detected, and — with ANTHROPIC_API_KEY — a fidelity grader scores the
- * distillation against the source. Otherwise it falls back to enriching the
- * working state from the git tree. Either way: scrub → finalize → verify →
- * persist → advance head. Secrets are scrubbed before sealing; fidelity is null
- * until graded (honest, never faked).
+ * Claude Code supplies its transcript path through the checkpoint cursor.
+ * When that is absent, Baton discovers the newest Codex rollout for this exact
+ * project cwd. The scrubbed source travels as an attachment and, with
+ * ANTHROPIC_API_KEY, grades the structured handoff against the source.
  */
 export async function passBaton(cwd, opts = {}, reporter = CLI_REPORTER) {
     const store = ProjectStore.open(cwd);
     const config = store.config();
     const state = store.loadWorkingState();
     const cursor = store.loadCursor();
-    // Locate the source transcript (if checkpoints recorded one).
+    // Prefer the explicitly checkpointed Claude transcript, then discover the
+    // latest Codex rollout scoped to this exact project root.
     let attachments;
     let transcriptText;
     let transcriptFindings = [];
     let tool = "other";
     let captureMode = "fallback";
     let model;
-    if (cursor.transcriptPath && existsSync(cursor.transcriptPath)) {
+    const codexPath = cursor.transcriptPath
+        ? null
+        : findLatestCodexSession(store.root, opts.codexSessionsRoot);
+    const transcriptPath = cursor.transcriptPath && existsSync(cursor.transcriptPath)
+        ? cursor.transcriptPath
+        : codexPath;
+    if (transcriptPath) {
         try {
-            const scrubbedTranscript = scrub(readFileSync(cursor.transcriptPath, "utf8"));
+            const scrubbedTranscript = scrub(readFileSync(transcriptPath, "utf8"));
             transcriptText = scrubbedTranscript.clean;
             transcriptFindings = scrubbedTranscript.findings;
-            const session = parseClaudeCodeTranscript(transcriptText);
+            const session = transcriptPath === cursor.transcriptPath
+                ? parseClaudeCodeTranscript(transcriptText)
+                : parseCodexTranscript(transcriptText);
             const attId = transcriptAttachmentId(session);
             if (attId) {
                 attachments = [transcriptAttachment(session, attId)];
-                tool = "claude-code";
+                tool = session.tool;
                 captureMode = "transcript";
                 model = session.model ?? undefined;
             }
@@ -86,7 +93,24 @@ export async function passBaton(cwd, opts = {}, reporter = CLI_REPORTER) {
     // Review gate: show what's about to be sealed and require confirmation.
     if (opts.review) {
         const parent = config.head ? { id: config.head, handoff: store.loadHandoff(config.head) } : null;
-        reporter.write("\n" + renderReview(scrubbed, { tool, captureMode, parent }) + "\n");
+        reporter.write("\n" + renderReview(scrubbed, {
+            tool,
+            captureMode,
+            parent,
+            transcript: transcriptText && transcriptPath && attachments?.[0]
+                ? {
+                    path: transcriptPath,
+                    bytes: attachments[0].bytes,
+                    lines: transcriptText === ""
+                        ? 0
+                        : transcriptText.endsWith("\n")
+                            ? transcriptText.split("\n").length - 1
+                            : transcriptText.split("\n").length,
+                }
+                : undefined,
+            scrubbedFindings: findings.map((finding) => ({ type: finding.type, count: finding.count })),
+            remoteRegistered: config.remote !== null,
+        }) + "\n");
         if (!(await reporter.confirm("Seal this baton?"))) {
             reporter.warn("aborted — nothing sealed");
             return { sealed: false };

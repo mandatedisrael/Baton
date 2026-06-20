@@ -63,7 +63,7 @@ Commands:
   install      register the Claude Code checkpoint hook for this project
   uninstall    remove the Claude Code checkpoint hook
   mcp setup    print ready-to-paste MCP config for Codex / Cursor / generic clients
-  doctor       diagnose the installation and verify local batons
+  doctor       diagnose the installation and verify local batons (--network probes live endpoints)
 
 Options:
   -h, --help        show this help
@@ -286,7 +286,8 @@ function main(argv: string[]): void {
       return runRender(process.cwd(), format as RulesFormat, id, write);
     }
     case "doctor":
-      return runDoctor(process.cwd());
+      void runDoctor(process.cwd(), { network: rest.includes("--network") }).catch(die);
+      return;
     case "mcp": {
       const sub = rest[0];
       if (sub === "setup" || sub === "config") {

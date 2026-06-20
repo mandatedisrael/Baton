@@ -3,12 +3,17 @@ import { findProjectRoot } from "../../store/paths.ts";
 import { hooksInstalled } from "../hooks.ts";
 import { fail, ok, warn } from "../output.ts";
 import { loadIdentity, isZkLoginIdentity } from "../../chain/identity.ts";
+import { probeHttpsEndpoint } from "../../chain/network-health.ts";
+
+export interface DoctorOptions {
+  network?: boolean;
+}
 
 /**
  * `baton doctor` — diagnose the local installation and project.
  * Every check is independent; doctor never throws, it reports.
  */
-export function runDoctor(cwd: string): void {
+export async function runDoctor(cwd: string, options: DoctorOptions = {}): Promise<void> {
   let healthy = true;
   const check = (label: string, fn: () => string | void): void => {
     try {
@@ -61,6 +66,30 @@ export function runDoctor(cwd: string): void {
       const remote = store.config().remote!;
       return `${remote.network} · ${remote.projectObjectId}`;
     });
+    if (options.network) {
+      const remote = store.config().remote!;
+      const endpoints = [
+        ["Sui RPC", remote.rpcUrl],
+        ["Walrus upload relay", remote.walrus.uploadRelayUrl],
+        ["Walrus aggregator", remote.walrus.aggregatorUrl],
+        ...remote.seal.serverConfigs
+          .filter((server) => server.aggregatorUrl)
+          .map((server, index) => [`Seal aggregator ${index + 1}`, server.aggregatorUrl!] as const),
+      ] as const;
+      const probes = await Promise.allSettled(
+        endpoints.map(async ([label, url]) => ({ label, result: await probeHttpsEndpoint(url) })),
+      );
+      for (let index = 0; index < probes.length; index += 1) {
+        const [label] = endpoints[index]!;
+        const probe = probes[index]!;
+        if (probe.status === "fulfilled") {
+          ok(`${label}: reachable · ${probe.value.result.address} · HTTP ${probe.value.result.status}`);
+        } else {
+          healthy = false;
+          fail(`${label}: ${probe.reason instanceof Error ? probe.reason.message : String(probe.reason)}`);
+        }
+      }
+    }
   } else {
     warn("remote project: not registered — local handoffs still work; run `baton login` then `baton register`");
   }

@@ -1,6 +1,7 @@
 import type { RemoteProjectConfig } from "../schema/project.ts";
 
-export const TESTNET_RPC_URL = "https://fullnode.testnet.sui.io:443";
+/** Canonical Testnet RPC host; avoids the resolver-fragile legacy CNAME. */
+export const TESTNET_RPC_URL = "https://public-rpc.sui-testnet.mystenlabs.com";
 export const BATON_CORE_TESTNET_PACKAGE =
   "0xd92b150b57ef31defb5b9ddd5a155102efe1c34058a19fdb30cbe4f4a46aa3e3";
 export const BATON_CORE_TESTNET_ORIGINAL_PACKAGE =

@@ -236,7 +236,7 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 | `baton render <claude-md\|agents-md\|cursorrules> [id] [--write]` | Project a baton into a per-tool rules file. |
 | `baton install` / `uninstall` | Add or remove the Claude Code checkpoint hook. |
 | `baton mcp setup` | Print ready-to-paste MCP configs for Codex, Cursor, etc. |
-| `baton doctor` | Diagnose the install and verify local batons. |
+| `baton doctor [--network]` | Diagnose the install and verify local batons; optionally probe configured Sui, Walrus, and Seal endpoints. |
 
 ### Using Baton inside your agent (low-friction setup)
 

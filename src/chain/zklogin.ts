@@ -47,6 +47,7 @@ const DEFAULT_PROVER_URL = "https://prover-dev.mystenlabs.com/v1";
 const DEFAULT_SALT_URL = "https://salt.api.mystenlabs.com/get_salt";
 const DEFAULT_LOGIN_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 const DEFAULT_MAX_EPOCH_BUFFER = 30; // ~30 epochs buffer (generous for Testnet/Mainnet)
+const DEFAULT_REDIRECT_PORT = 51731;
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 
@@ -248,6 +249,7 @@ export interface StartZkLoginResult {
   state: string;
   nonce: string;
   randomness: string;
+  maxEpoch: number;
   ephemeralKeypair: Ed25519Keypair;
   redirectUri: string;
   port: number;
@@ -270,12 +272,16 @@ export async function startZkLoginFlow(
       "A Google OAuth client ID is required for zkLogin.\n" +
         "1. Go to https://console.cloud.google.com/apis/credentials\n" +
         "2. Create OAuth 2.0 Client ID (Web application)\n" +
-        "3. Add http://localhost:* to Authorized redirect URIs (or a specific port)\n" +
+        `3. Add http://localhost:${DEFAULT_REDIRECT_PORT}/callback to Authorized redirect URIs\n` +
         "4. Set BATON_GOOGLE_CLIENT_ID=your-client-id or pass --client-id\n"
     );
   }
 
-  const port = config.redirectPort ?? 0; // 0 = let OS pick
+  // OAuth providers require the redirect URI to match exactly. Use a stable
+  // default rather than advertising port 0 and listening somewhere else.
+  const port = config.redirectPort && config.redirectPort > 0
+    ? config.redirectPort
+    : DEFAULT_REDIRECT_PORT;
   const maxEpoch = config.maxEpochBuffer ? (await getCurrentEpoch(client)) + config.maxEpochBuffer : await computeMaxEpoch(client);
 
   const { keypair: ephemeralKeypair, randomness } = createEphemeralSession();
@@ -283,11 +289,11 @@ export async function startZkLoginFlow(
   const state = randomUUID();
 
   // Use a fixed path that our server understands
-  const redirectUri = `http://localhost:${port || "<dynamic>"}/callback`;
+  const redirectUri = `http://localhost:${port}/callback`;
 
   const url = buildGoogleOAuthUrl({
     clientId,
-    redirectUri: `http://localhost:${port || 0}/callback`, // actual port filled after listen
+    redirectUri,
     nonce,
     state,
   });
@@ -297,8 +303,9 @@ export async function startZkLoginFlow(
     state,
     nonce,
     randomness,
+    maxEpoch,
     ephemeralKeypair,
-    redirectUri: `http://localhost:${port}/callback`,
+    redirectUri,
     port,
   };
 }
@@ -316,30 +323,14 @@ export async function performZkLogin(
 
   const prep = await startZkLoginFlow(client, config);
 
-  // We need the actual listening port if dynamic
-  // Re-create the server with the final port after we know it.
-  // Simpler: always let the capture function manage its own server on the requested port.
-
-  const clientId = config.clientId ?? getEnvClientId(provider)!;
-
   const state = prep.state;
   const randomness = prep.randomness;
   const ephemeralKeypair = prep.ephemeralKeypair;
-  const maxEpoch = await computeMaxEpoch(client, config.maxEpochBuffer); // recompute fresh
+  const maxEpoch = prep.maxEpoch;
+  const finalUrl = prep.url;
 
-  // Recompute nonce with the final maxEpoch we will use
-  const nonce = generateNonce(ephemeralKeypair.getPublicKey(), maxEpoch, randomness);
-
-  const actualPort = config.redirectPort && config.redirectPort > 0 ? config.redirectPort : 0;
-
-  const redirectUriForUrl = `http://localhost:${actualPort || 0}/callback`;
-
-  const finalUrl = buildGoogleOAuthUrl({
-    clientId,
-    redirectUri: redirectUriForUrl,
-    nonce,
-    state,
-  });
+  // Begin listening before the browser can redirect back to localhost.
+  const capture = captureIdToken(prep.port, state, loginTimeout);
 
   console.log("\nOpening browser for Google login...");
   console.log("If it does not open, visit this URL:\n" + finalUrl + "\n");
@@ -347,7 +338,7 @@ export async function performZkLogin(
   launchBrowser(finalUrl);
 
   // Capture
-  const { jwt } = await captureIdTokenWithDynamicPort(actualPort, state, loginTimeout, redirectUriForUrl);
+  const { jwt } = await capture;
 
   // Now derive address + salt
   const salt = await fetchSalt(jwt, config.saltUrl);
@@ -367,23 +358,6 @@ export async function performZkLogin(
   };
 
   return { session, jwt };
-}
-
-async function captureIdTokenWithDynamicPort(
-  requestedPort: number,
-  expectedState: string,
-  timeoutMs: number,
-  _redirectHint: string
-): Promise<{ jwt: string }> {
-  // We always create the server inside captureIdToken.
-  // If port was 0 we still need to discover the actual port the server chose.
-  // For simplicity we use a fixed reasonable port (49152-65535 range) or let it be dynamic and rewrite.
-
-  // To keep code simple and robust, we pick a high port if not specified.
-  const port = requestedPort > 0 ? requestedPort : 51731; // arbitrary high port unlikely to conflict
-
-  const captureResult = await captureIdToken(port, expectedState, timeoutMs);
-  return { jwt: captureResult.jwt };
 }
 
 /** Fetch salt. Tries Mysten service first, falls back to error with guidance. */
@@ -482,8 +456,9 @@ export async function createZkLoginSignature(params: {
   let userSignature: string | Uint8Array;
 
   if (params.txBytes) {
-    // Ed25519Keypair.sign returns raw signature bytes (Uint8Array)
-    userSignature = await ephemeralKeypair.sign(params.txBytes);
+    // zkLogin embeds the complete intent-scoped Sui signature, not a raw
+    // 64-byte Ed25519 signature.
+    userSignature = (await ephemeralKeypair.signTransaction(params.txBytes)).signature;
   } else {
     // Caller will combine later. We still need a signature.
     // For flexibility, if no bytes we throw — production code should always pass bytes.
@@ -518,14 +493,16 @@ export async function signTransactionWithZkLogin(params: {
   const ephKeypair = Ed25519Keypair.fromSecretKey(session.ephemeralPrivateKey);
 
   // Determine maxEpoch — we can re-use the one in the session if still valid
-  let maxEpoch = session.maxEpoch;
+  const maxEpoch = session.maxEpoch;
+  let currentEpoch: number | null = null;
   try {
-    const current = await getCurrentEpoch(client);
-    if (current > maxEpoch) {
-      throw new BatonError("INVALID_STATE", "zkLogin ephemeral session has expired. Please run `baton login` again.");
-    }
+    currentEpoch = await getCurrentEpoch(client);
   } catch {
-    // proceed with stored maxEpoch
+    // A temporary RPC failure should not prevent an otherwise valid stored
+    // session from attempting a transaction; Sui still verifies maxEpoch.
+  }
+  if (currentEpoch !== null && currentEpoch > maxEpoch) {
+    throw new BatonError("INVALID_STATE", "zkLogin ephemeral session has expired. Please run `baton login` again.");
   }
 
   // Build bytes if Transaction was passed
@@ -539,8 +516,11 @@ export async function signTransactionWithZkLogin(params: {
   // Make sure we have a fresh proof for this exact session
   const extendedPub = getExtendedEphemeralPublicKey(ephKeypair.getPublicKey());
 
+  if (!session.lastJwt) {
+    throw new BatonError("INVALID_STATE", "zkLogin session has no JWT. Please run `baton login --zk` again.");
+  }
   const proofInputs = await fetchZkProof({
-    jwt: session.lastJwt!,
+    jwt: session.lastJwt,
     extendedEphemeralPublicKey: extendedPub,
     maxEpoch,
     jwtRandomness: session.randomness,
@@ -549,12 +529,12 @@ export async function signTransactionWithZkLogin(params: {
   });
 
   // Ephemeral signs the transaction bytes
-  const ephemeralSigBytes = await ephKeypair.sign(txBytes);
+  const ephemeralSignature = (await ephKeypair.signTransaction(txBytes)).signature;
 
   const zkSig = getZkLoginSignature({
     inputs: proofInputs,
     maxEpoch,
-    userSignature: ephemeralSigBytes,
+    userSignature: ephemeralSignature,
   });
 
   return zkSig;

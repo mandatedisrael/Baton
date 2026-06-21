@@ -5,6 +5,8 @@ import { projectStatus } from "../core/status.ts";
 import { applySelfReportCheckpoint } from "../core/self-report.ts";
 import { ProjectStore } from "../store/project.ts";
 
+const ToolId = z.enum(["claude-code", "codex", "cursor", "chatgpt-web", "other", "opencode"]);
+
 const Decision = z.object({
   id: z.string().min(1),
   choice: z.string().min(1),
@@ -69,6 +71,7 @@ export function registerWriteTools(server: McpServer, projectDir: string): void 
       "Seal the current scrubbed WorkingState into a verified, content-addressed baton and queue remote publication.",
     inputSchema: z.object({
       confirm: z.literal(true).describe("Must be true to authorize creation of a new immutable baton"),
+      sourceTool: ToolId.optional().describe("Calling agent; use opencode for an OpenCode self-report pass"),
     }).strict(),
     outputSchema: {
       id: z.string(),
@@ -78,7 +81,7 @@ export function registerWriteTools(server: McpServer, projectDir: string): void 
       warnings: z.array(z.string()),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-  }, async () => {
+  }, async ({ sourceTool }) => {
     const warnings: string[] = [];
     const notices: string[] = [];
     const reporter: PassReporter = {
@@ -87,7 +90,7 @@ export function registerWriteTools(server: McpServer, projectDir: string): void 
       write: (message) => notices.push(message),
       confirm: async () => true,
     };
-    const passed = await passBaton(projectDir, { review: false }, reporter);
+    const passed = await passBaton(projectDir, { review: false, sourceTool }, reporter);
     if (!passed.sealed || !passed.id || !passed.handoff) throw new Error("baton pass did not seal a handoff");
     const structured = {
       id: passed.id,

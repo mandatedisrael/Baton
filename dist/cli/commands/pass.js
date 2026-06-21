@@ -39,13 +39,13 @@ export async function passBaton(cwd, opts = {}, reporter = CLI_REPORTER) {
     let attachments;
     let transcriptText;
     let transcriptFindings = [];
-    let tool = "other";
-    let captureMode = "fallback";
+    let tool = opts.sourceTool ?? "other";
+    let captureMode = opts.sourceTool ? "self-report" : "fallback";
     let model;
-    const codexPath = cursor.transcriptPath
+    const codexPath = cursor.transcriptPath || (opts.sourceTool && opts.sourceTool !== "codex")
         ? null
         : findLatestCodexSession(store.root, opts.codexSessionsRoot);
-    const transcriptPath = cursor.transcriptPath && existsSync(cursor.transcriptPath)
+    const transcriptPath = (!opts.sourceTool || opts.sourceTool === "claude-code") && cursor.transcriptPath && existsSync(cursor.transcriptPath)
         ? cursor.transcriptPath
         : codexPath;
     if (transcriptPath) {
@@ -156,7 +156,7 @@ export async function passBaton(cwd, opts = {}, reporter = CLI_REPORTER) {
     const lineage = handoff.meta.parents.length ? ` ← ${shortId(handoff.meta.parents[0])}` : "";
     const touched = handoff.repoMap.touched.length;
     const bits = [
-        handoff.meta.captureMode === "transcript" ? "transcript" : "fallback",
+        handoff.meta.captureMode,
         touched > 0 ? `${touched} file(s)` : null,
         handoff.fidelity.score !== null ? `fidelity ${(handoff.fidelity.score * 100).toFixed(0)}%` : null,
     ].filter(Boolean);

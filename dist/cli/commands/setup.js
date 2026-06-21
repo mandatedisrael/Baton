@@ -73,6 +73,36 @@ function upsertJsonMcp(path, root, launch) {
     writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);
     return path;
 }
+function upsertOpenCode(root, launch) {
+    const path = join(root, "opencode.json");
+    let config = {};
+    if (existsSync(path)) {
+        try {
+            const parsed = JSON.parse(readFileSync(path, "utf8"));
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+                throw new Error("expected an object");
+            config = parsed;
+        }
+        catch (err) {
+            throw new BatonError("INVALID_STATE", `cannot safely update invalid JSON config ${path}`, { cause: err });
+        }
+    }
+    const currentMcp = config.mcp;
+    const mcp = currentMcp && typeof currentMcp === "object" && !Array.isArray(currentMcp)
+        ? currentMcp
+        : {};
+    config.$schema ??= "https://opencode.ai/config.json";
+    config.mcp = {
+        ...mcp,
+        baton: {
+            type: "local",
+            command: [launch.command, ...launch.args, "--project", root],
+            enabled: true,
+        },
+    };
+    writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);
+    return path;
+}
 export function setupAgents(root, agents, launch = currentMcpLaunch()) {
     const paths = [];
     for (const agent of agents) {
@@ -82,13 +112,15 @@ export function setupAgents(root, agents, launch = currentMcpLaunch()) {
             paths.push(upsertJsonMcp(join(root, ".mcp.json"), root, launch));
             installHooks(root);
         }
-        else
+        else if (agent === "cursor")
             paths.push(upsertJsonMcp(join(root, ".cursor", "mcp.json"), root, launch));
+        else
+            paths.push(upsertOpenCode(root, launch));
     }
     return paths;
 }
 export function runSetup(root, target) {
-    const agents = target === "all" ? ["codex", "claude-code", "cursor"] : [target];
+    const agents = target === "all" ? ["codex", "claude-code", "cursor", "opencode"] : [target];
     for (const path of setupAgents(root, agents))
         ok(`configured ${path}`);
     ok("restart the configured agent so it discovers the Baton MCP tools");

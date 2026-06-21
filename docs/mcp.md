@@ -53,6 +53,23 @@ Clients using the common `mcpServers` JSON shape can launch Baton as follows:
 
 Consult the client vendor's documentation for the location and exact name of its MCP configuration file. Baton uses the standard local stdio transport from the official [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk).
 
+## OpenCode
+
+Run `baton setup opencode` to create or update the project-root `opencode.json`. Baton preserves unrelated JSON settings and writes the local MCP shape OpenCode expects:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "baton": {
+      "type": "local",
+      "command": ["baton-mcp", "--project", "/absolute/path/to/project"],
+      "enabled": true
+    }
+  }
+}
+```
+
 ## Tools
 
 | Tool | Effect |
@@ -64,7 +81,7 @@ Consult the client vendor's documentation for the location and exact name of its
 | `baton_resume` | Recover if needed and render the canonical receiving-agent prompt. |
 | `baton_verify` | Return the verified transcript lines cited by a decision or failed approach. |
 | `baton_checkpoint` | Persist scrubbed self-reported latest truth. Supplied list sections replace; omitted sections remain. |
-| `baton_pass` | Seal the current state and queue publication. Requires `confirm: true`. |
+| `baton_pass` | Seal the current state and queue publication. Requires `confirm: true`; OpenCode callers should set `sourceTool: "opencode"`. |
 
 ## Safety contract
 

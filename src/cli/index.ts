@@ -64,7 +64,7 @@ Commands:
   install      register the Claude Code checkpoint hook for this project
   uninstall    remove the Claude Code checkpoint hook
   mcp setup    print ready-to-paste MCP config for Codex / Cursor / generic clients
-  setup <agent> safely configure Baton for codex, claude-code, cursor, or all
+  setup <agent> safely configure Baton for codex, claude-code, cursor, opencode, or all
   doctor       diagnose the installation and verify local batons (--network probes live endpoints)
 
 Options:
@@ -218,9 +218,21 @@ function main(argv: string[]): void {
       return runUninstall(process.cwd());
     case "status":
       return runStatus(process.cwd());
-    case "pass":
-      void runPass(process.cwd(), { review: !rest.includes("--yes") }).catch(die);
+    case "pass": {
+      const toolFlag = rest.indexOf("--tool");
+      let sourceTool: ToolId | undefined;
+      if (toolFlag !== -1) {
+        const value = rest[toolFlag + 1];
+        if (!value || !(TOOL_IDS as readonly string[]).includes(value)) {
+          process.stderr.write(`usage: baton pass [--yes] [--tool ${TOOL_IDS.join("|")}]\n`);
+          process.exitCode = 2;
+          return;
+        }
+        sourceTool = value as ToolId;
+      }
+      void runPass(process.cwd(), { review: !rest.includes("--yes"), sourceTool }).catch(die);
       return;
+    }
     case "log":
       return runLog(process.cwd());
     case "show": {
@@ -297,14 +309,14 @@ function main(argv: string[]): void {
         printMcpSetup(tool);
         return;
       }
-      process.stderr.write("usage: baton mcp setup [codex | cursor | generic | all]\n");
+      process.stderr.write("usage: baton mcp setup [codex | cursor | opencode | generic | all]\n");
       process.exitCode = 2;
       return;
     }
     case "setup": {
       const target = rest[0];
-      if (rest.length !== 1 || !target || !["codex", "claude-code", "cursor", "all"].includes(target)) {
-        process.stderr.write("usage: baton setup <codex | claude-code | cursor | all>\n");
+      if (rest.length !== 1 || !target || !["codex", "claude-code", "cursor", "opencode", "all"].includes(target)) {
+        process.stderr.write("usage: baton setup <codex | claude-code | cursor | opencode | all>\n");
         process.exitCode = 2;
         return;
       }
@@ -347,12 +359,14 @@ tool_timeout_sec = 120
   }
 
   if (tool === "opencode" || tool === "generic" || tool === "all") {
-    console.log("OpenCode / Generic / Claude Desktop / other MCP clients:");
+    console.log("OpenCode (save as opencode.json in the project root):");
     console.log(JSON.stringify({
-      mcpServers: {
+      $schema: "https://opencode.ai/config.json",
+      mcp: {
         baton: {
-          command: cmd,
-          args: ["--project", project],
+          type: "local",
+          command: [cmd, "--project", project],
+          enabled: true,
         },
       },
     }, null, 2) + "\n");

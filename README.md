@@ -224,7 +224,7 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 | `baton accept <file>` | Verify a recipient-owned, active `AccessCap` and join the shared project. |
 | `baton revoke <address>` | Revoke delegated access on-chain; future uncached decryptions are denied. |
 | `baton status` | Show the current working state. |
-| `baton pass [--yes]` | Review and seal the working state into a baton; `--yes` explicitly bypasses confirmation. |
+| `baton pass [--yes] [--tool <id>]` | Review and seal the working state; self-reporting clients use `--tool` to prevent attaching another agent's transcript. |
 | `baton log` | List batons, newest first (`*` marks the head). |
 | `baton show <id>` | Print a verified baton (short ids ok). |
 | `baton resume [id] [--tool <id>]` | Render the resume prompt for a baton (head if omitted). |
@@ -236,7 +236,7 @@ With `ANTHROPIC_API_KEY` set, checkpoints distill automatically and passes are g
 | `baton render <claude-md\|agents-md\|cursorrules> [id] [--write]` | Project a baton into a per-tool rules file. |
 | `baton install` / `uninstall` | Add or remove the Claude Code checkpoint hook. |
 | `baton mcp setup` | Print ready-to-paste MCP configs for Codex, Cursor, etc. |
-| `baton setup <codex\|claude-code\|cursor\|all>` | Safely write project-scoped MCP configuration using absolute runtime paths. |
+| `baton setup <codex\|claude-code\|cursor\|opencode\|all>` | Safely write project-scoped MCP configuration using absolute runtime paths. |
 | `baton doctor [--network]` | Diagnose the install and verify local batons; optionally probe configured Sui, Walrus, and Seal endpoints. |
 
 ### Using Baton inside your agent (low-friction setup)

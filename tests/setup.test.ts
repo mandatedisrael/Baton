@@ -13,7 +13,8 @@ test("setupAgents writes project-scoped configs with absolute launch and preserv
     mkdirSync(join(root, ".codex"), { recursive: true });
     writeFileSync(join(root, ".codex", "config.toml"), "model = \"gpt-test\"\n");
     writeFileSync(join(root, ".mcp.json"), JSON.stringify({ mcpServers: { github: { url: "https://example" } } }));
-    setupAgents(root, ["codex", "claude-code", "cursor"], launch);
+    writeFileSync(join(root, "opencode.json"), JSON.stringify({ theme: "system", mcp: { github: { type: "remote" } } }));
+    setupAgents(root, ["codex", "claude-code", "cursor", "opencode"], launch);
 
     const codex = readFileSync(join(root, ".codex", "config.toml"), "utf8");
     assert.match(codex, /model = "gpt-test"/);
@@ -27,6 +28,13 @@ test("setupAgents writes project-scoped configs with absolute launch and preserv
 
     const cursor = JSON.parse(readFileSync(join(root, ".cursor", "mcp.json"), "utf8"));
     assert.equal(cursor.mcpServers.baton.command, "/opt/node");
+
+    const opencode = JSON.parse(readFileSync(join(root, "opencode.json"), "utf8"));
+    assert.equal(opencode.theme, "system");
+    assert.equal(opencode.mcp.github.type, "remote");
+    assert.equal(opencode.mcp.baton.type, "local");
+    assert.equal(opencode.mcp.baton.enabled, true);
+    assert.deepEqual(opencode.mcp.baton.command, ["/opt/node", "/opt/baton/mcp.js", "--project", root]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

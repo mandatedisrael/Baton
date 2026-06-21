@@ -63,10 +63,14 @@ test("stdio MCP server exposes and executes the complete Baton tool surface", as
     assert.equal(checkpoint.isError, undefined);
     assert.equal((checkpoint.structuredContent as { checkpointCount: number }).checkpointCount, 1);
 
-    const passed = await client.callTool({ name: "baton_pass", arguments: { confirm: true } });
+    const passed = await client.callTool({
+      name: "baton_pass",
+      arguments: { confirm: true, sourceTool: "opencode" },
+    });
     assert.equal(passed.isError, undefined);
     const batonId = (passed.structuredContent as { id: string }).id;
     assert.match(batonId, /^[a-f0-9]{64}$/);
+    assert.equal(ProjectStore.open(root).loadHandoff(batonId).meta.tool, "opencode");
 
     const log = await client.callTool({ name: "baton_log", arguments: { limit: 5 } });
     assert.equal((log.structuredContent as { entries: unknown[] }).entries.length, 1);

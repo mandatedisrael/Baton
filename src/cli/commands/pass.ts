@@ -22,6 +22,8 @@ export interface PassOptions {
   review?: boolean;
   /** Override Codex session discovery for tests or managed installations. */
   codexSessionsRoot?: string;
+  /** Identify a self-reporting caller and avoid attaching another tool's transcript. */
+  sourceTool?: ToolId;
 }
 
 export interface PassReporter {
@@ -68,13 +70,13 @@ export async function passBaton(
   let attachments: Attachment[] | undefined;
   let transcriptText: string | undefined;
   let transcriptFindings: ScrubFinding[] = [];
-  let tool: ToolId = "other";
-  let captureMode: CaptureMode = "fallback";
+  let tool: ToolId = opts.sourceTool ?? "other";
+  let captureMode: CaptureMode = opts.sourceTool ? "self-report" : "fallback";
   let model: string | undefined;
-  const codexPath = cursor.transcriptPath
+  const codexPath = cursor.transcriptPath || (opts.sourceTool && opts.sourceTool !== "codex")
     ? null
     : findLatestCodexSession(store.root, opts.codexSessionsRoot);
-  const transcriptPath = cursor.transcriptPath && existsSync(cursor.transcriptPath)
+  const transcriptPath = (!opts.sourceTool || opts.sourceTool === "claude-code") && cursor.transcriptPath && existsSync(cursor.transcriptPath)
     ? cursor.transcriptPath
     : codexPath;
   if (transcriptPath) {
@@ -195,7 +197,7 @@ export async function passBaton(
   const lineage = handoff.meta.parents.length ? ` ← ${shortId(handoff.meta.parents[0]!)}` : "";
   const touched = handoff.repoMap.touched.length;
   const bits = [
-    handoff.meta.captureMode === "transcript" ? "transcript" : "fallback",
+    handoff.meta.captureMode,
     touched > 0 ? `${touched} file(s)` : null,
     handoff.fidelity.score !== null ? `fidelity ${(handoff.fidelity.score * 100).toFixed(0)}%` : null,
   ].filter(Boolean);

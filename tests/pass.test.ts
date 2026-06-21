@@ -98,3 +98,25 @@ test("pass discovers, scrubs, and attaches the latest Codex project transcript",
   assert.doesNotMatch(saved, new RegExp(secret));
   assert.match(saved, /\[REDACTED:github-token\]/);
 });
+
+test("OpenCode self-report pass never attaches a stale Codex transcript", async () => {
+  const store = ProjectStore.init(root);
+  const sessionsRoot = join(root, "codex-sessions");
+  const sessionDir = join(sessionsRoot, "2026", "06", "20");
+  mkdirSync(sessionDir, { recursive: true });
+  writeFileSync(join(sessionDir, "rollout.jsonl"), [
+    JSON.stringify({ type: "session_meta", payload: { id: "old-codex", cwd: root } }),
+    JSON.stringify({ type: "response_item", payload: {
+      type: "message", role: "assistant", content: [{ type: "output_text", text: "stale Codex work" }],
+    } }),
+  ].join("\n") + "\n");
+
+  await runPass(root, { codexSessionsRoot: sessionsRoot, sourceTool: "opencode" });
+
+  const head = store.config().head;
+  assert.ok(head);
+  const handoff = store.loadHandoff(head);
+  assert.equal(handoff.meta.tool, "opencode");
+  assert.equal(handoff.meta.captureMode, "self-report");
+  assert.deepEqual(handoff.attachments, []);
+});
